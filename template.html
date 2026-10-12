@@ -337,7 +337,7 @@ let curFolder = null;
 let jobs = [];      // in-memory: {id, status:'run'|'err', error, snapshot}
 let openId = null;
 
-const modelName = () => { const m = store.get('gm', ''); return !m || /^gemini-2\.5/.test(m) ? 'gemini-3.8-flash' : m; };
+const modelName = () => store.get('gm', '') || 'gemini-3.8-flash';
 const msg = t => { $('msg').textContent = t || ''; };
 
 // ---------- Composer ----------
@@ -1152,7 +1152,7 @@ function modelChain() {
   const rank = m => /lite/.test(m) ? 1 : /pro/.test(m) ? 3 : /flash/.test(m) ? 0 : 2;
   const list = savedModels().filter(m => m !== primary && !BAD_MODEL.test(m));
   list.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
-  const fb = list.length ? list.slice(0, 3) : ['gemini-flash-latest', 'gemini-flash-lite-latest'].filter(m => m !== primary);
+  const fb = list.length ? list.slice(0, 6) : ['gemini-flash-latest', 'gemini-flash-lite-latest'].filter(m => m !== primary);
   return [primary, ...fb];
 }
 
@@ -1200,8 +1200,8 @@ async function streamOnce(model, body, snap, onStage, signal) {
       if ([404, 429, 500, 502, 503, 504].includes(r.status)) err.retryable = true;
       if (r.status === 429) {
         const d = parseRetryMs(m), real = (m.match(/model:\s*([\w.\-]+)/) || [])[1];
-        if (d > 300000 || /PerDay|per day|free_tier_requests/i.test(m)) {
-          const wait = d > 300000 ? d : 6 * 3600000;
+        if (d > 300000 || /limit:\s*0\b/.test(m) || /PerDay|per day|free_tier_requests/i.test(m)) {
+          const wait = d > 300000 ? d : /limit:\s*0\b/.test(m) ? 24 * 3600000 : 6 * 3600000;
           markExhausted(model, wait); if (real) markExhausted(real, wait);
           err.exhausted = true; err.waitMs = wait; err.model = real || model;
           err.message = 'Free quota used up for ' + (real || model) + ' (resets in about ' + fmtWait(wait) + ').';
