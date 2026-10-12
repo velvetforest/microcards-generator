@@ -88,7 +88,11 @@ kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--bo
 .hint.bad{color:var(--danger)}
 .sy-code{font-size:40px;font-weight:800;letter-spacing:.18em;text-align:center;color:var(--strong);margin:14px 0 6px}
 #syQr{margin:8px auto;border-radius:10px;background:#fff;padding:8px}
-.sy-allow{margin-top:12px;padding:12px;border:1px solid var(--accent);border-radius:12px;background:var(--soft)}
+.sy-allow{margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sy-allow #syAllowTxt{flex:1;min-width:150px;font-size:12.5px;font-weight:400;line-height:1.35;color:var(--text);margin:0}
+.sy-allow #syAllowTxt b{font-weight:700;color:var(--strong)}
+.sy-allow .row{gap:6px}
+.sy-allow .btn{padding:5px 12px;font-size:12px;border-radius:9px}
 .spacer{flex:1}
 .switch{position:relative;width:56px;height:28px;border-radius:999px;border:1px solid var(--border);background:var(--surface);padding:0;flex:none}
 .switch .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on);display:flex;align-items:center;justify-content:center;transition:transform .2s;box-shadow:var(--glow)}
@@ -237,7 +241,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
     <div class="sy-code" id="syCode"></div>
     <canvas id="syQr" style="display:none"></canvas>
     <div id="syAllow" class="sy-allow" hidden>
-      <div id="syAllowTxt" style="font-weight:600;margin-bottom:8px"></div>
+      <div id="syAllowTxt"></div>
       <div class="row"><button class="btn primary" id="syYes">Allow</button><button class="btn" id="syNo">Decline</button></div>
     </div>
   </div>
@@ -1622,7 +1626,9 @@ async function startHost() {
   mine.es = ntfySub(code, m => {
     if (S !== mine || m.t !== 'offer' || mine.busy || mine.open) return;
     mine.busy = m;
-    $('syAllowTxt').textContent = (m.name || 'Another device') + ' wants to sync with this device. Allow?';
+    const tx = $('syAllowTxt'); tx.textContent = '';
+    const nm = document.createElement('b'); nm.textContent = m.name || 'Another device';
+    tx.append(nm, ' wants to sync with this device.');
     $('syAllow').hidden = false;
   });
 }
