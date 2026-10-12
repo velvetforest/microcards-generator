@@ -1138,6 +1138,8 @@ function thinkingVariants() {
   const sp = store.get('sp', 'balanced');
   if (sp === 'quality') return [null];
   return [
+    { thinkingLevel: sp === 'fast' ? 'minimal' : 'low', includeThoughts: true },
+    { thinkingBudget: sp === 'fast' ? 512 : 2048, includeThoughts: true },
     { thinkingLevel: sp === 'fast' ? 'minimal' : 'low' },
     { thinkingBudget: sp === 'fast' ? 512 : 2048 },
     null
@@ -1167,35 +1169,44 @@ function fmtWait(ms) { const t = Math.round(ms / 60000), h = Math.floor(t / 60),
 
 const cancelErr = () => { const c = new Error('Cancelled'); c.cancelled = true; return c; };
 
-async function streamOnce(model, body, snap, onStage, signal) {
+function firstActivityMs(snap) {
+  const base = store.get('sp', 'balanced') === 'quality' ? 90000 : 35000;
+  const mb = snap.files.reduce((n, f) => n + (f.kind === 'inline' ? f.data.length * 0.75 : 0), 0) / 1e6;
+  return base + Math.min(60000, mb * 8000) + (snap.links.length ? 20000 : 0);
+}
+const hedgeMs = snap => Math.round(firstActivityMs(snap) * 0.55);
+
+async function streamOnce(model, body, snap, onStage, signal, onActive) {
   const key = store.get('gk');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
   const variants = thinkingVariants();
   let vi = Math.min(thinkIdxBy[model] || 0, variants.length - 1);
-  const firstByte = store.get('sp', 'balanced') === 'quality' ? 180000 : 80000;
+  const t1 = firstActivityMs(snap), t2 = store.get('sp', 'balanced') === 'quality' ? 300000 : 150000;
   for (;;) {
     body.generationConfig = { temperature: snap.action === 'giu-nguyen' ? 0.15 : 0.4, maxOutputTokens: 60000 };
     if (variants[vi]) body.generationConfig.thinkingConfig = variants[vi];
-    const tc = new AbortController(); let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; tc.abort(); }, firstByte);
-    const onAbort = () => tc.abort();
-    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    const tc = new AbortController(); let reason = '';
+    const kill = why => { reason = why; tc.abort(); };
+    const timer1 = setTimeout(() => kill('quiet'), t1), timer2 = setTimeout(() => kill('slow'), t2);
+    const done = () => { clearTimeout(timer1); clearTimeout(timer2); };
+    if (signal) signal.addEventListener('abort', () => tc.abort(), { once: true });
     onStage('Waiting for ' + model + '...');
     const t0 = Date.now();
+    const timeoutErr = () => { const e = new Error(model + (reason === 'quiet' ? ' did not respond within ' + Math.round(t1 / 1000) + 's.' : ' was too slow to answer.')); e.retryable = true; return e; };
     let r;
     try {
       r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: tc.signal });
     } catch (e) {
-      clearTimeout(timer);
+      done();
       if (signal && signal.aborted) throw cancelErr();
-      const err = new Error(timedOut ? model + ' did not respond within ' + (firstByte / 1000) + 's' : (e.message || 'Network error'));
-      err.retryable = true; throw err;
+      if (reason) throw timeoutErr();
+      const err = new Error(e.message || 'Network error'); err.retryable = true; throw err;
     }
-    clearTimeout(timer);
     if (!r.ok) {
+      done();
       const errText = await r.text();
       let m = errText; try { m = JSON.parse(errText).error.message; } catch (e) {}
-      if (r.status === 400 && /think/i.test(m) && vi < variants.length - 1) { vi++; thinkIdxBy[model] = vi; continue; }
+      if (r.status === 400 && /think|thought/i.test(m) && vi < variants.length - 1) { vi++; thinkIdxBy[model] = vi; continue; }
       const err = new Error('Error ' + r.status + ' (' + model + '): ' + m);
       if ([404, 429, 500, 502, 503, 504].includes(r.status)) err.retryable = true;
       if (r.status === 429) {
@@ -1209,14 +1220,13 @@ async function streamOnce(model, body, snap, onStage, signal) {
       }
       throw err;
     }
-    const tv = variants[vi], mode = tv ? Object.keys(tv)[0] + '=' + tv[Object.keys(tv)[0]] : 'default';
-    onStage(model + ': first reply after ' + Math.round((Date.now() - t0) / 1000) + 's (thinking ' + mode + ')');
+    const tv = variants[vi], mode = tv ? (tv.thinkingLevel ? 'level=' + tv.thinkingLevel : 'budget=' + tv.thinkingBudget) : 'default';
     const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = '', text = '', finish = '';
+    let buf = '', text = '', finish = '', active = false, answered = false;
     try {
       for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done: end, value } = await reader.read();
+        if (end) break;
         buf += dec.decode(value, { stream: true });
         let nl;
         while ((nl = buf.indexOf('\n')) >= 0) {
@@ -1225,10 +1235,19 @@ async function streamOnce(model, body, snap, onStage, signal) {
           const payload = line.slice(5).trim();
           if (!payload || payload === '[DONE]') continue;
           let j; try { j = JSON.parse(payload); } catch (e) { continue; }
+          if (!active) {
+            active = true; clearTimeout(timer1);
+            if (onActive && !onActive(model)) throw cancelErr();
+            onStage(model + ': started after ' + Math.round((Date.now() - t0) / 1000) + 's (thinking ' + mode + ')');
+          }
           if (j.error) { const err = new Error(j.error.message || 'Stream error'); err.retryable = [429, 500, 503].includes(j.error.code); throw err; }
           const cand = j.candidates && j.candidates[0];
           if (cand) {
-            if (cand.content && cand.content.parts) cand.content.parts.forEach(p => { if (p.text && !p.thought) text += p.text; });
+            if (cand.content && cand.content.parts) cand.content.parts.forEach(p => {
+              if (!p.text) return;
+              if (p.thought) { if (!answered) onStage(model + ': thinking - ' + p.text.replace(/[*#\n]+/g, ' ').trim().slice(0, 70)); }
+              else { text += p.text; if (!answered) { answered = true; clearTimeout(timer2); } }
+            });
             if (cand.finishReason) finish = cand.finishReason;
           }
           if (!text && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Blocked: ' + j.promptFeedback.blockReason);
@@ -1239,12 +1258,50 @@ async function streamOnce(model, body, snap, onStage, signal) {
         }
       }
     } catch (e) {
+      done();
       if (signal && signal.aborted) throw cancelErr();
+      if (e.cancelled) throw e;
+      if (reason) throw timeoutErr();
       throw e;
     }
+    done();
     if (!text.trim()) { const err = new Error(model + ' returned no content.'); err.retryable = true; throw err; }
     return { text, truncated: finish === 'MAX_TOKENS', model };
   }
+}
+
+function runRound(queue, body, snap, onStage, signal) {
+  return new Promise((resolve, reject) => {
+    const ctls = new Map(); let winner = null, next = 0, settled = false, hedge = null, lastErr = null;
+    const finish = (fn, v) => { if (settled) return; settled = true; clearTimeout(hedge); ctls.forEach(c => c.abort()); fn(v); };
+    const onActive = m => {
+      if (winner && winner !== m) return false;
+      winner = m; clearTimeout(hedge);
+      ctls.forEach((c, k) => { if (k !== m) c.abort(); });
+      return true;
+    };
+    const launch = () => {
+      if (settled || next >= queue.length) return;
+      const model = queue[next++], ctl = new AbortController(); ctls.set(model, ctl);
+      if (signal) signal.addEventListener('abort', () => ctl.abort(), { once: true });
+      clearTimeout(hedge);
+      if (next < queue.length && !winner) hedge = setTimeout(() => { onStage('Still waiting, also asking ' + queue[next] + '...'); launch(); }, hedgeMs(snap));
+      streamOnce(model, Object.assign({}, body), snap, onStage, ctl.signal, onActive)
+        .then(res => finish(resolve, res))
+        .catch(e => {
+          ctls.delete(model);
+          if (settled) return;
+          if (signal && signal.aborted) return finish(reject, cancelErr());
+          if (e.cancelled) return;
+          if (!e.retryable) return finish(reject, e);
+          lastErr = e; if (winner === model) winner = null;
+          onStage((e.message || 'Model busy') + ' Trying another model...');
+          if (next < queue.length) launch();
+          else if (ctls.size === 0) finish(reject, lastErr);
+        });
+    };
+    launch();
+  });
 }
 
 async function callGemini(snap, note, onStage, signal) {
@@ -1276,26 +1333,21 @@ async function callGemini(snap, note, onStage, signal) {
   const body = { system_instruction: { parts: [{ text: guide + EXTRA }] }, contents: [{ role: 'user', parts }] };
   if (snap.links.length) body.tools = [{ url_context: {} }];
 
-  const full = modelChain();
-  const chain = full.filter(m => !exhaustedLeft(m));
-  if (!chain.length) {
-    const left = Math.min(...full.map(exhaustedLeft));
+  let queue = modelChain().filter(m => !exhaustedLeft(m)).slice(0, 3);
+  if (!queue.length) {
+    const left = Math.min(...modelChain().map(exhaustedLeft));
     throw new Error('Free quota is used up for all your selected models (resets in about ' + fmtWait(left) + '). Pick other models in Settings (Load my available models), wait, or enable billing in Google AI Studio for higher limits.');
   }
   let lastErr = null;
   for (let round = 0; round < 2; round++) {
-    if (chain.every(m => exhaustedLeft(m))) break;
-    for (const model of chain) {
-      if (exhaustedLeft(model)) continue;
-      try { return await streamOnce(model, body, snap, onStage, signal); }
-      catch (e) {
-        if (e.cancelled) throw e;
-        if (!e.retryable) throw e;
-        lastErr = e;
-        if (chain.length > 1) onStage((e.message || 'Model busy') + '. Trying another model...');
-      }
+    try { return await runRound(queue, body, snap, onStage, signal); }
+    catch (e) {
+      if (e.cancelled || !e.retryable) throw e;
+      lastErr = e;
+      queue = queue.filter(m => !exhaustedLeft(m));
+      if (!queue.length) break;
+      if (round === 0) { onStage('Models are busy. Retrying in 5s...'); await sleep(5000); }
     }
-    if (round === 0) { onStage('Models are busy. Retrying in 6s...'); await sleep(6000); }
   }
   throw lastErr || new Error('Could not reach Gemini.');
 }
