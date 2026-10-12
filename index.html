@@ -206,8 +206,8 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <input class="field" id="setKey" type="password" placeholder="AIza..." autocomplete="off">
   <div class="hint">Get one for free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. The key is stored only in your browser and sent only to Google.</div>
   <label>Model</label>
-  <input class="field" id="setModel" list="modelList" placeholder="gemini-3.8-flash">
-  <datalist id="modelList"><option value="gemini-3.8-flash"></datalist>
+  <select id="setModelSel" class="field"></select>
+  <input class="field" id="setModel" placeholder="Custom model name, e.g. gemini-3.8-flash" autocomplete="off" spellcheck="false" style="display:none;margin-top:8px">
   <div class="row" style="margin-top:8px"><button class="btn" id="btnModels">Load my available models</button><span class="hint" id="modelsMsg" style="margin:0"></span></div>
   <label class="chk" style="margin-top:12px"><input type="checkbox" id="setAuto"><span>Switch to another model automatically when one is busy or slow</span></label>
   <label>Speed</label>
@@ -335,6 +335,9 @@ title: ...
 - **Ngôn ngữ: TUYỆT ĐỐI KHÔNG DỊCH.** Mọi chữ (badge, title, nội dung, chú thích SVG, `@@UI`) phải đúng ngôn ngữ của văn bản nguồn. Nguồn tiếng Anh thì toàn bộ tiếng Anh, nguồn tiếng Việt thì tiếng Việt. Hướng dẫn này viết bằng tiếng Việt không có nghĩa là kết quả phải tiếng Việt. Nguồn trộn nhiều ngôn ngữ thì giữ nguyên từng đoạn theo ngôn ngữ gốc. Giữ nguyên tên riêng, thuật ngữ, trích dẫn.
 - **Trung thực với nguồn:** chỉ dùng thông tin có trong tài liệu và link người dùng gửi. Không bịa số liệu, điều luật, trích dẫn. Phần nguồn không nói rõ thì bỏ qua hoặc ghi rõ "nguồn chưa nêu" (bằng ngôn ngữ của nguồn).
 - Không để một card quá dài. Nếu quá nhiều nội dung thì tách thành card mới.
+
+- **Đoạn code** trong nguồn phải chép nguyên văn trong `<pre><code>...</code></pre>` (giữ nguyên thụt lề, xuống dòng, escape `<` `>` `&`), code ngắn trong câu dùng `<code>`. Không rút gọn, không viết lại code.
+- Mức minh hoạ (nếu có dòng "MỨC MINH HOẠ") chỉ áp dụng cho hình trang trí tự nghĩ ra, không áp dụng cho công thức, bảng, code và hình/sơ đồ có sẵn trong nguồn.
 
 ### Chế độ xử lý
 
@@ -1037,6 +1040,9 @@ html:has(.track.v){scroll-snap-type:y proximity}
 .card-body table{width:100%;border-collapse:collapse;font-size:11px}
 .card-body th,.card-body td{border:1px solid var(--border);padding:3px 6px;text-align:left}
 .card-body th{background:var(--surface);color:var(--text-strong)}
+.card-body pre{margin:0;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow-x:auto;font-size:11px;line-height:1.45;color:var(--text)}
+.card-body code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em}
+.card-body :not(pre)>code{background:var(--surface);padding:0 4px;border-radius:3px}
 .katex-display{overflow-x:auto;overflow-y:hidden;margin:.45em 0}
 .hl{background:var(--accent-soft);color:var(--accent-deep);font-weight:700;padding:0 3px;border-radius:3px}
 :root[data-theme="dark"] .hl{text-shadow:var(--glow-text)}
@@ -1302,6 +1308,15 @@ function modelChain() {
   return [primary, ...fb];
 }
 
+function parseRetryMs(m) {
+  const x = String(m).match(/retry in\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:([\d.]+)s)?/i);
+  return x ? ((+x[1] || 0) * 3600 + (+x[2] || 0) * 60 + (+x[3] || 0)) * 1000 : 0;
+}
+const exhaustedMap = () => { try { return JSON.parse(store.get('exh', '{}')); } catch (e) { return {}; } };
+function markExhausted(model, ms) { const e = exhaustedMap(); e[model] = Date.now() + ms; store.set('exh', JSON.stringify(e)); }
+const exhaustedLeft = model => Math.max(0, (exhaustedMap()[model] || 0) - Date.now());
+function fmtWait(ms) { const t = Math.round(ms / 60000), h = Math.floor(t / 60), mi = t % 60; return h ? h + 'h ' + mi + 'm' : mi + ' min'; }
+
 const cancelErr = () => { const c = new Error('Cancelled'); c.cancelled = true; return c; };
 
 async function streamOnce(model, body, snap, onStage, signal) {
@@ -1335,6 +1350,15 @@ async function streamOnce(model, body, snap, onStage, signal) {
       if (r.status === 400 && /think/i.test(m) && vi < variants.length - 1) { vi++; thinkIdxBy[model] = vi; continue; }
       const err = new Error('Error ' + r.status + ' (' + model + '): ' + m);
       if ([404, 429, 500, 502, 503, 504].includes(r.status)) err.retryable = true;
+      if (r.status === 429) {
+        const d = parseRetryMs(m), real = (m.match(/model:\s*([\w.\-]+)/) || [])[1];
+        if (d > 300000 || /PerDay|per day|free_tier_requests/i.test(m)) {
+          const wait = d > 300000 ? d : 6 * 3600000;
+          markExhausted(model, wait); if (real) markExhausted(real, wait);
+          err.exhausted = true; err.waitMs = wait; err.model = real || model;
+          err.message = 'Free quota used up for ' + (real || model) + ' (resets in about ' + fmtWait(wait) + ').';
+        }
+      }
       throw err;
     }
     const tv = variants[vi], mode = tv ? Object.keys(tv)[0] + '=' + tv[Object.keys(tv)[0]] : 'default';
@@ -1380,9 +1404,9 @@ async function callGemini(snap, note, onStage, signal) {
   const inl = snap.files.filter(f => f.kind === 'inline' && (f.mime === 'application/pdf' || f.mime.startsWith('image/')));
   const ill = store.get('ill', 'simple');
   const illTxt = ill === 'none'
-    ? 'MỨC MINH HOẠ: KHÔNG. Không vẽ SVG minh hoạ trang trí và bỏ khối minh hoạ thường. Chỉ dùng hình gốc cắt từ nguồn (fig) và sơ đồ graph khi nguồn có. Card chữ thuần được phép. Mục tiêu là tạo thật nhanh.\n\n'
+    ? 'MỨC MINH HOẠ: KHÔNG. Không vẽ SVG minh hoạ trang trí và bỏ khối minh hoạ thường. Chỉ dùng hình gốc cắt từ nguồn (fig) và sơ đồ graph khi nguồn có. Card chữ thuần được phép. Mục tiêu là tạo thật nhanh. Quy tắc mức minh hoạ này CHỈ áp dụng cho hình trang trí do bạn tự nghĩ ra. KHÔNG áp dụng cho công thức, bảng, đoạn code, và hình/sơ đồ/biểu đồ có sẵn trong nguồn: những thứ đó vẫn phải được giữ đầy đủ, chính xác như quy tắc đã nêu.\n\n'
     : ill === 'simple'
-      ? 'MỨC MINH HOẠ: TỐI GIẢN. Mỗi khối SVG chỉ dùng tối đa khoảng 6 hình cơ bản, mã ngắn gọn (dưới 600 ký tự), không chi tiết trang trí. Mục tiêu là tạo nhanh.\n\n'
+      ? 'MỨC MINH HOẠ: TỐI GIẢN. Mỗi khối SVG chỉ dùng tối đa khoảng 6 hình cơ bản, mã ngắn gọn (dưới 600 ký tự), không chi tiết trang trí. Mục tiêu là tạo nhanh. Quy tắc mức minh hoạ này CHỈ áp dụng cho hình trang trí do bạn tự nghĩ ra. KHÔNG áp dụng cho công thức, bảng, đoạn code, và hình/sơ đồ/biểu đồ có sẵn trong nguồn: những thứ đó vẫn phải được giữ đầy đủ, chính xác như quy tắc đã nêu.\n\n'
       : '';
   const head = `ACTION: ${snap.action}\n\n` + illTxt +
     (inl.length ? 'TỆP ĐÍNH KÈM (số thứ tự dùng cho data-src của hình):\n' + inl.map((f, i) => (i + 1) + ': ' + f.name).join('\n') + '\n\n' : '') +
@@ -1404,10 +1428,17 @@ async function callGemini(snap, note, onStage, signal) {
   const body = { system_instruction: { parts: [{ text: guide + EXTRA }] }, contents: [{ role: 'user', parts }] };
   if (snap.links.length) body.tools = [{ url_context: {} }];
 
-  const chain = modelChain();
+  const full = modelChain();
+  const chain = full.filter(m => !exhaustedLeft(m));
+  if (!chain.length) {
+    const left = Math.min(...full.map(exhaustedLeft));
+    throw new Error('Free quota is used up for all your selected models (resets in about ' + fmtWait(left) + '). Pick other models in Settings (Load my available models), wait, or enable billing in Google AI Studio for higher limits.');
+  }
   let lastErr = null;
   for (let round = 0; round < 2; round++) {
+    if (chain.every(m => exhaustedLeft(m))) break;
     for (const model of chain) {
+      if (exhaustedLeft(model)) continue;
       try { return await streamOnce(model, body, snap, onStage, signal); }
       catch (e) {
         if (e.cancelled) throw e;
@@ -1931,9 +1962,18 @@ if (/^#sync=\d{6}$/.test(location.hash)) {
 
 // ---------- Settings ----------
 function fillModelList() {
-  $('modelList').innerHTML = '';
-  savedModels().forEach(m => { const o = document.createElement('option'); o.value = m; $('modelList').appendChild(o); });
+  const sel = $('setModelSel'), cur = $('setModel').value.trim() || modelName();
+  const list = savedModels(); if (!list.includes(cur) && cur) list.unshift(cur);
+  sel.innerHTML = '';
+  list.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o); });
+  const c = document.createElement('option'); c.value = '__custom'; c.textContent = 'Other (type a name)...'; sel.appendChild(c);
+  sel.value = cur; $('setModel').value = cur; $('setModel').style.display = 'none';
 }
+$('setModelSel').onchange = () => {
+  const v = $('setModelSel').value;
+  if (v === '__custom') { $('setModel').style.display = ''; $('setModel').focus(); }
+  else { $('setModel').value = v; $('setModel').style.display = 'none'; }
+};
 $('btnModels').onclick = async () => {
   const key = $('setKey').value.trim() || store.get('gk');
   if (!key) { $('modelsMsg').textContent = 'Enter your API key first.'; return; }
@@ -1948,7 +1988,7 @@ $('btnModels').onclick = async () => {
       tok = j.nextPageToken || '';
     } while (tok);
     store.set('mlist', JSON.stringify(out)); fillModelList();
-    $('modelsMsg').textContent = out.length + ' models found. Pick one in the Model box.';
+    $('modelsMsg').textContent = out.length + ' models found. Pick one from the list above.';
   } catch (e) { $('modelsMsg').textContent = e.message || String(e); }
 };
 $('btnSettings').onclick = () => {

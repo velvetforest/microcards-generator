@@ -54,6 +54,9 @@ title: ...
 - **Trung thực với nguồn:** chỉ dùng thông tin có trong tài liệu và link người dùng gửi. Không bịa số liệu, điều luật, trích dẫn. Phần nguồn không nói rõ thì bỏ qua hoặc ghi rõ "nguồn chưa nêu" (bằng ngôn ngữ của nguồn).
 - Không để một card quá dài. Nếu quá nhiều nội dung thì tách thành card mới.
 
+- **Đoạn code** trong nguồn phải chép nguyên văn trong `<pre><code>...</code></pre>` (giữ nguyên thụt lề, xuống dòng, escape `<` `>` `&`), code ngắn trong câu dùng `<code>`. Không rút gọn, không viết lại code.
+- Mức minh hoạ (nếu có dòng "MỨC MINH HOẠ") chỉ áp dụng cho hình trang trí tự nghĩ ra, không áp dụng cho công thức, bảng, code và hình/sơ đồ có sẵn trong nguồn.
+
 ### Chế độ xử lý
 
 - `ACTION: tom-tat`: rút gọn nội dung, giữ ý cốt lõi, số liệu và điều kiện quan trọng, rồi highlight cụm then chốt. Công thức quan trọng vẫn chép đúng LaTeX, không diễn đạt lại.
