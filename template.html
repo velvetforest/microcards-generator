@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Micro Cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F8F4EE; --panel:#FAF7F2; --surface:#F4EFEA; --white:#fff; --border:#EBDED6;
+  --text:#383331; --strong:#2C2A29; --muted:#8C7A75;
+  --accent:#E89CAE; --accent-hover:#D88B9D; --deep:#A64B5E; --soft:#F4D3DA;
+  --alt:#f9e3d6; --alt-hover:#f3d2bd; --alt-bd:#EBC6AE; --alt-fg:#7A4A32; --alt-ink:#DDA27F; --danger:#D85A5A;
+  --on:#fff; --ovl:rgba(255,255,255,.92); --shadow:0 12px 30px -8px rgba(216,139,157,.15); --shadow-hover:0 12px 30px -8px rgba(216,139,157,.3); --glow:none; --glow-text:none;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#232323; --panel:#2D2D2D; --surface:#363033; --white:#3D3539; --border:#4A3C42;
+  --text:#F3D9E0; --strong:#FFB8CB; --muted:#A58C95;
+  --accent:#FF9DB8; --accent-hover:#FFB3C8; --deep:#FF8FAE; --soft:rgba(255,157,184,.16);
+  --alt:#f9e3d6; --alt-hover:#fff0e6; --alt-bd:#f9e3d6; --alt-fg:#2D2D2D; --alt-ink:#f9e3d6; --danger:#FF7A85;
+  --on:#2D2D2D; --ovl:rgba(61,53,57,.94);
+  --shadow:0 0 0 1px rgba(255,157,184,.14),0 16px 44px -10px rgba(255,143,177,.28);
+  --shadow-hover:0 0 0 1px rgba(255,157,184,.3),0 16px 44px -10px rgba(255,143,177,.45);
+  --glow:0 0 10px rgba(255,143,177,.45),0 0 22px rgba(255,143,177,.18); --glow-text:0 0 8px rgba(255,157,184,.45);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border)}
+header h1{font-family:'Pacifico',cursive;font-size:28px;margin:0;color:var(--strong);font-weight:400;letter-spacing:.5px;line-height:1.2}
+.gear{width:46px;height:46px;border-radius:14px;padding:0;display:flex;align-items:center;justify-content:center}
+.gear svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+header h1 span{text-shadow:var(--glow-text)}
+header h1 .p{color:var(--accent)}
+header h1 .g{color:var(--alt-ink)}
+button{font-family:inherit;cursor:pointer}
+.btn{border:1px solid var(--border);background:var(--white);color:var(--deep);border-radius:12px;padding:9px 16px;font-size:13px;font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on);box-shadow:var(--glow)}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.alt{background:var(--alt);border-color:var(--alt-bd);color:var(--alt-fg)}
+.btn.alt:hover{background:var(--alt-hover)}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+main{max-width:1100px;margin:0 auto;padding:24px}
+.composer{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:20px;box-shadow:var(--shadow)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#textInput{margin-top:14px;min-height:96px;max-height:340px;resize:vertical;font-family:inherit;font-size:14px;line-height:1.5;border-radius:12px;padding:11px 14px}
+.linkbar{display:flex;gap:8px;margin-top:14px}
+.linkbar input{flex:1;border:1px solid var(--border);background:var(--white);border-radius:12px;padding:11px 14px;font:inherit;font-size:14px;color:var(--text)}
+.linkbar input:focus,textarea:focus,select:focus,.field:focus{outline:2px solid var(--accent);outline-offset:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{display:flex;align-items:center;gap:6px;background:var(--soft);color:var(--deep);border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;font-weight:600;max-width:100%}
+.chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:320px}
+.chip.file{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.chip button{border:0;background:transparent;color:inherit;font-size:16px;line-height:1;padding:0 6px}
+.actions{margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--white)}
+.seg button{border:0;background:transparent;padding:9px 14px;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--soft);color:var(--deep)}
+kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:0 5px;margin-left:4px;color:var(--muted);background:var(--surface)}
+.themewrap{position:relative}
+.themebtn{display:flex;align-items:center;gap:8px;height:46px;border-radius:14px}
+.themebtn .dot{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:var(--glow);border:1px solid var(--border)}
+.themebtn .ico{display:none;width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.palette{position:absolute;right:0;top:calc(100% + 8px);display:none;flex-direction:column;gap:8px;padding:10px;background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);z-index:50}
+.palette.open{display:flex}
+.pal{width:40px;height:40px;border-radius:10px;border:2px solid var(--border);padding:0;position:relative}
+.pal:hover{transform:scale(1.06)}
+.pal.on{outline:2px solid var(--deep);outline-offset:2px}
+.pal.on::after{content:'\2713';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#2D2D2D}
+.cpal{display:flex;gap:6px;flex-wrap:wrap}
+.cpal button{width:24px;height:24px;border-radius:7px;border:2px solid var(--border);padding:0}
+.cpal button:hover{transform:scale(1.1)}
+.cpal button.on{outline:2px solid var(--deep);outline-offset:2px}
+.pages-row{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--strong);margin:0;cursor:pointer}
+.chk input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;margin:0}
+#pgRange{width:210px;max-width:100%}
+#noticeInput{flex:1;min-width:240px;width:auto}
+#pgRange:disabled{opacity:.5;cursor:not-allowed}
+.composer{position:relative}
+.composer.drag{outline:2px dashed var(--accent);outline-offset:4px}
+.composer.drag::after{content:'Drop files to add them';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:20px;background:var(--soft);color:var(--deep);font-weight:700;font-size:16px;pointer-events:none;backdrop-filter:blur(2px)}
+.spacer{flex:1}
+.switch{position:relative;width:56px;height:28px;border-radius:999px;border:1px solid var(--border);background:var(--surface);padding:0;flex:none}
+.switch .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on);display:flex;align-items:center;justify-content:center;transition:transform .2s;box-shadow:var(--glow)}
+.switch .knob svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.switch .moon{display:none}
+.switch[aria-checked=true] .knob{transform:translateX(28px)}
+.switch[aria-checked=true] .sun{display:none}
+.switch[aria-checked=true] .moon{display:block}
+.swlabel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:600;color:var(--muted)}
+.hdr{display:flex;align-items:center;gap:12px}
+.msg{margin-top:12px;font-size:13px;color:var(--danger);min-height:1em}
+h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.tile{position:relative;aspect-ratio:1/1;border-radius:16px;overflow:hidden;border:1px solid var(--border);background:var(--panel);cursor:pointer;transition:transform .15s,box-shadow .15s}
+.tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover)}
+.tile iframe{position:absolute;top:0;left:0;width:700px;height:700px;border:0;transform-origin:0 0;pointer-events:none;background:var(--bg)}
+.tile .info{position:absolute;left:0;right:0;bottom:0;padding:34px 12px 10px;background:linear-gradient(transparent,rgba(44,42,41,.82));color:#fff}
+.tile .info b{display:block;font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tile .info small{font-size:11px;opacity:.85}
+.tile .del{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;border:0;background:var(--ovl);color:var(--danger);font-size:15px;opacity:0;transition:opacity .15s}
+.tile:hover .del{opacity:1}
+.tile.pending,.tile.error{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:16px;cursor:default}
+.tile.pending:hover,.tile.error:hover{transform:none;box-shadow:none}
+.tile .t{font-size:13px;font-weight:600;color:var(--strong)}
+.tile .e{font-size:12px;color:var(--danger);max-height:90px;overflow:auto}
+.spin{width:30px;height:30px;border-radius:50%;border:3px solid var(--soft);border-top-color:var(--accent);animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.tile.folder{background:var(--soft);border-color:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;text-align:center}
+.tile.folder svg{width:84px;height:84px}
+.tile.folder .fn{font-size:14px;font-weight:700;color:var(--strong);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.tile.folder small{font-size:11px;color:var(--deep)}
+.tile .ren{position:absolute;top:8px;right:44px;width:30px;height:30px;border-radius:50%;border:0;background:var(--ovl);color:var(--deep);font-size:14px;opacity:0;transition:opacity .15s}
+.tile:hover .ren{opacity:1}
+.crumb{display:flex;align-items:center;gap:10px;margin:32px 0 14px;flex-wrap:wrap}
+.crumb h2{margin:0}
+.crumb .back{border:0;background:transparent;color:var(--deep);font-weight:700;font-size:14px;padding:0}
+.empty{color:var(--muted);font-size:14px;padding:30px 0;text-align:center;grid-column:1/-1}
+dialog{border:1px solid var(--border);border-radius:20px;background:var(--panel);color:var(--text);padding:22px;width:min(640px,94vw);font-family:inherit}
+dialog::backdrop{background:rgba(44,42,41,.5)}
+dialog h3{margin:0 0 14px;color:var(--strong)}
+label{display:block;font-size:12px;font-weight:700;color:var(--deep);margin:14px 0 6px}
+.field,textarea,select{width:100%;border:1px solid var(--border);background:var(--white);border-radius:10px;padding:10px 12px;font:inherit;font-size:13px;color:var(--text)}
+textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+.hint a{color:var(--deep)}
+#viewer{width:min(900px,96vw);height:92vh;padding:0;display:none;flex-direction:column}
+#viewer[open]{display:flex}
+#viewer .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
+#viewer .bar b{flex:1;font-size:14px;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#viewer iframe{flex:1;border:0;width:100%}
+@media (max-width:560px){
+  .hdr{gap:8px}
+  .themebtn .lbl,.themebtn .dot{display:none} .themebtn .ico{display:block} .themebtn{width:46px;padding:0;justify-content:center}
+  header{padding:12px 14px} header h1{font-size:23px} main{padding:14px}
+  .composer{padding:14px} .actions .spacer{flex-basis:100%;height:0}
+  #viewer{width:100vw;height:100dvh;max-width:100vw;border-radius:0}
+  #viewer .bar{flex-wrap:wrap}
+  .tile .del,.tile .ren{opacity:1}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="p">Micro</span> <span class="g">Cards</span></h1>
+  <div class="hdr">
+    <div class="themewrap">
+      <button class="btn themebtn" id="palBtn" title="Change theme" aria-haspopup="true" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.9 1.5-1.9-.3-1 .3-2.1 1.4-2.1H17a4 4 0 0 0 4-4c0-5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg><span class="lbl">Change theme</span></button>
+      <div class="palette" id="palList" role="menu"></div>
+    </div><button class="switch" id="themeSw" role="switch" aria-checked="false" title="Toggle dark mode"><span class="knob"><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></button><button class="btn gear" id="btnSettings" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
+</header>
+
+<main>
+  <section class="composer" id="composer">
+    <div class="row">
+      <button class="btn" id="btnUpload">Upload files</button>
+      <input type="file" id="fileInput" multiple hidden accept=".pdf,.txt,.md,.csv,.html,.json,image/*,audio/*">
+      <span class="hint" style="margin:0">PDF, images, audio, txt, md, csv, html, json. You can drop here, too.</span>
+    </div>
+    <textarea id="textInput" placeholder="Paste text directly here (optional)..." spellcheck="false"></textarea>
+    <div class="linkbar">
+      <input id="linkInput" type="url" placeholder="Paste a link and press Enter to add it, then paste another...">
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="pages-row">
+      <label class="chk"><input type="checkbox" id="pgOn"><span>Pages</span></label>
+      <input id="pgRange" class="field" placeholder="e.g. 1-10, 12, 15-" disabled autocomplete="off" spellcheck="false">
+      <input id="noticeInput" class="field" placeholder="Type more notices for the model here" autocomplete="off">
+    </div>
+    <div class="actions">
+      <div class="swlabel">Card theme <button class="switch" id="modeSw" role="switch" aria-checked="false" title="Light / dark cards"><span class="knob"><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></button><div class="cpal" id="cardPalList"></div></div>
+      <select id="folderSel" class="field" style="width:auto;max-width:220px" title="Save to folder"></select>
+      <span class="spacer"></span>
+      <button class="btn primary" id="btnSum">Summarize</button>
+      <button class="btn alt" id="btnKeep">Keep original</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </section>
+
+  <div class="crumb" id="crumb"></div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<dialog id="settings">
+  <h3>Settings</h3>
+  <label>Gemini API key</label>
+  <input class="field" id="setKey" type="password" placeholder="AIza..." autocomplete="off">
+  <div class="hint">Get one for free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. The key is stored only in your browser and sent only to Google.</div>
+  <label>Model</label>
+  <input class="field" id="setModel" list="modelList" placeholder="gemini-3.8-flash">
+  <datalist id="modelList"><option value="gemini-3.8-flash"></datalist>
+  <div class="hint">If you get a 404 "model no longer available" error, type the new model name suggested in the message.</div>
+  <label>Speed</label>
+  <select id="setSpeed" class="field">
+    <option value="fast">Fast (least thinking, quickest)</option>
+    <option value="balanced">Balanced (recommended)</option>
+    <option value="quality">Quality (most thinking, slowest)</option>
+  </select>
+  <label>Content rules (sent with every generation)</label>
+  <textarea id="setGuide" spellcheck="false"></textarea>
+  <div class="hint">Card layout, colors and navigation are built into the app. These rules control only the content.</div>
+  <label>Backup</label>
+  <div class="row">
+    <button class="btn" id="btnExport">Export library</button>
+    <button class="btn" id="btnImport">Import file</button>
+    <input type="file" id="importInput" accept=".json,application/json" hidden>
+    <span class="hint" id="importMsg" style="margin:0"></span>
+  </div>
+  <div class="row" style="margin-top:16px">
+    <button class="btn" id="btnResetGuide">Restore default rules</button>
+    <span class="spacer"></span>
+    <button class="btn" id="btnCloseSettings">Close</button>
+    <button class="btn primary" id="btnSaveSettings">Save</button>
+  </div>
+</dialog>
+
+<dialog id="viewer">
+  <div class="bar">
+    <b id="vTitle"></b>
+    <button class="btn" id="vFull" title="Fullscreen (press F)">Fullscreen <kbd>F</kbd></button>
+    <button class="btn" id="vTab" title="Open in a new window">New window</button>
+    <button class="btn" id="vRename">Rename</button>
+    <select id="vMove" class="field" style="width:auto;max-width:180px" title="Move to folder"></select>
+    <button class="btn" id="vDownload">Download</button>
+    <button class="btn danger" id="vDelete">Delete</button>
+    <button class="btn" id="vClose">Close</button>
+  </div>
+  <iframe id="vFrame" sandbox="allow-scripts" allow="fullscreen"></iframe>
+</dialog>
+
+<script type="text/plain" id="defaultGuide">
+__STYLE_GUIDE__
+</script>
+
+<script>
+const $ = id => document.getElementById(id);
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const DEFAULT_GUIDE = $('defaultGuide').textContent.split('<\\/' + 'script').join('<' + '/script').trim();
+const store = {
+  get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }
+};
+
+const EXTRA = `
+
+---
+QUY TẮC VẬN HÀNH (ưu tiên cao nhất):
+- Chỉ trả về theo ĐÚNG giao thức đầu ra có dòng @@ trong hướng dẫn (@@TITLE, @@LANG, @@UI, @@CARD, @@BODY, @@GRAPH, @@ENDGRAPH, @@END). Không trả HTML đầy đủ, không giải thích, không bọc trong markdown.
+- Nguồn gồm các tệp đính kèm, văn bản đi kèm và nội dung của các link được liệt kê (hãy đọc từng link). Chỉ dùng thông tin có trong nguồn.
+- KHÔNG BAO GIỜ dịch. Toàn bộ chữ (kể cả @@TITLE, @@UI và nhãn) phải ở đúng ngôn ngữ của văn bản nguồn (nguồn tiếng Anh thì ra tiếng Anh). Hướng dẫn này viết bằng tiếng Việt không có nghĩa là kết quả phải tiếng Việt.
+- Tuân thủ đúng ACTION ở đầu tin nhắn người dùng.
+- SƠ ĐỒ KHỐI/LƯU ĐỒ (node và mũi tên): KHÔNG vẽ tay SVG. Dùng data-graph-ref: nếu tôi cung cấp sơ đồ Dn thì chỉ đặt <div data-graph-ref="Dn"></div> trong .illus-fill; nếu sơ đồ nằm trong ảnh/PDF thì liệt kê ĐẦY ĐỦ mọi node và mọi cạnh trong khối @@GRAPH rồi tham chiếu bằng data-graph-ref.
+- HÌNH MINH HOẠ CỦA NGUỒN (sơ đồ, biểu đồ, bảng, cây thư mục, mermaid/ASCII): KHÔNG BAO GIỜ bỏ, cắt bớt, rút gọn hay đơn giản hoá, kể cả khi ACTION là tom-tat (tóm tắt chỉ áp dụng cho văn bản). Vẽ lại giống hệt: đủ mọi ô, mọi mũi tên, đúng bố cục và đúng từng nhãn. Hình lớn thì đặt vào card riêng, không thu nhỏ chữ dưới 8px.
+- ACTION giu-nguyen = SAO CHÉP Y HỆT, không phải tóm tắt: chép nguyên văn từng câu, từng mục, từng công thức (LaTeX, giữ số hiệu), từng bảng, từng chú thích hình của phần được cung cấp; không bỏ, không gộp, không viết lại, không dừng giữa chừng. Dùng thêm nhiều card nếu cần.
+- Hình trong tệp PDF/ảnh đính kèm: dùng <div class="fig" data-src data-page data-box> để ứng dụng cắt đúng hình gốc từ tệp (giống hệt), theo hướng dẫn mục 5; ưu tiên cách này hơn vẽ lại.`;
+
+// ---------- IndexedDB ----------
+const dbp = new Promise((res, rej) => {
+  const r = indexedDB.open('card-studio', 3);
+  r.onupgradeneeded = () => {
+    const db = r.result;
+    if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', { keyPath: 'id' });
+    if (!db.objectStoreNames.contains('folders')) db.createObjectStore('folders', { keyPath: 'id' });
+    if (!db.objectStoreNames.contains('tomb')) db.createObjectStore('tomb', { keyPath: 'id' });
+  };
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+const tx = (store, mode, fn) => dbp.then(db => new Promise((res, rej) => {
+  const t = db.transaction(store, mode);
+  const req = fn(t.objectStore(store));
+  t.oncomplete = () => res(req && req.result);
+  t.onerror = () => rej(t.error);
+}));
+const dbAll = store => tx(store, 'readonly', s => s.getAll()).then(a => (a || []).sort((x, y) => y.created - x.created));
+const dbPut = (store, item) => tx(store, 'readwrite', s => s.put(item));
+const dbDel = (store, id) => tx(store, 'readwrite', s => s.delete(id));
+
+// ---------- State ----------
+let mode = 'light';
+let links = [];
+let files = [];     // {name, kind:'text'|'inline', mime, data}
+let items = [];     // saved card sets (have folderId)
+let folders = [];   // {id, name, created}
+let curFolder = null;
+let jobs = [];      // in-memory: {id, status:'run'|'err', error, snapshot}
+let openId = null;
+
+const modelName = () => { const m = store.get('gm', ''); return !m || /^gemini-2\.5/.test(m) ? 'gemini-3.8-flash' : m; };
+const msg = t => { $('msg').textContent = t || ''; };
+
+// ---------- Composer ----------
+$('modeSw').onclick = () => {
+  mode = mode === 'light' ? 'dark' : 'light';
+  $('modeSw').setAttribute('aria-checked', mode === 'dark');
+};
+
+// ---------- Color themes ----------
+const PAL = [
+  { id: 'pink', name: 'Pink', sw: '#E89CAE' },
+  { id: 'sage', name: 'Sage', sw: '#97B3AE',
+    light: { bg:'#F1F5F4', panel:'#F8FAF9', surface:'#E6EEEC', white:'#FFFFFF', border:'#D0DFDB', text:'#2F3B39', strong:'#1F2B29', muted:'#6B827E', accent:'#97B3AE', hover:'#86A39E', deep:'#43645F', soft:'#DAE7E4', on:'#1F2B29' },
+    dark:  { bg:'#1F2524', panel:'#28302F', surface:'#2F3938', white:'#364140', border:'#435250', text:'#DCEAE7', strong:'#A9D6CE', muted:'#8CA5A0', accent:'#9FC9C0', hover:'#B5DAD3', deep:'#8CC9BD', on:'#1F2524' } },
+  { id: 'mint', name: 'Mint', sw: '#D2E0D3',
+    light: { bg:'#F4F8F4', panel:'#FAFCFA', surface:'#E8F0E8', white:'#FFFFFF', border:'#D8E5D9', text:'#2F3A30', strong:'#1F2A20', muted:'#72857A', accent:'#D2E0D3', hover:'#C0D4C2', deep:'#4A7551', soft:'#E2ECE3', on:'#1F2A20' },
+    dark:  { bg:'#212523', panel:'#2A2F2B', surface:'#323A33', white:'#39433A', border:'#475549', text:'#E0EEE1', strong:'#C8E8CC', muted:'#8FA593', accent:'#B7D8BB', hover:'#CBE6CE', deep:'#A6D8AD', on:'#212523' } },
+  { id: 'sand', name: 'Sand', sw: '#D6CBBF',
+    light: { bg:'#F6F3EF', panel:'#FBF9F6', surface:'#EEE9E3', white:'#FFFFFF', border:'#E2DAD0', text:'#3A3430', strong:'#2A2521', muted:'#8A7D72', accent:'#D6CBBF', hover:'#C8BBAD', deep:'#755F4C', soft:'#E9E1D8', on:'#2A2521' },
+    dark:  { bg:'#252321', panel:'#2F2C29', surface:'#38342F', white:'#403B35', border:'#52493F', text:'#EDE4DA', strong:'#E8D8C4', muted:'#A39786', accent:'#D6CBBF', hover:'#E4DACE', deep:'#DBC9B1', on:'#252321' } },
+  { id: 'ivory', name: 'Ivory', sw: '#F0EEEA',
+    light: { bg:'#E6E3DD', panel:'#F0EEEA', surface:'#E3E0DA', white:'#FAF9F7', border:'#D2CEC6', text:'#38362F', strong:'#26241F', muted:'#7D7A71', accent:'#BDB7AB', hover:'#ADA699', deep:'#615B50', soft:'#DDD9D1', on:'#26241F' },
+    dark:  { bg:'#242423', panel:'#2E2E2C', surface:'#373735', white:'#3F3F3C', border:'#4F4E4A', text:'#EEEBE5', strong:'#F0EEEA', muted:'#A5A29B', accent:'#CFCAC0', hover:'#E0DCD3', deep:'#D8D3C9', on:'#242423' } },
+  { id: 'lavender', name: 'Lavender', sw: '#C9B8E8',
+    light: { bg:'#F5F2FA', panel:'#FBF9FE', surface:'#EDE7F6', white:'#FFFFFF', border:'#DCD2EC', text:'#36303F', strong:'#261F33', muted:'#82759A', accent:'#C9B8E8', hover:'#B9A5DE', deep:'#6B4FA3', soft:'#E5DCF4', on:'#261F33' },
+    dark:  { bg:'#231F2A', panel:'#2D2836', surface:'#363040', white:'#3E3748', border:'#4D4560', text:'#E9E0F7', strong:'#D6C3FB', muted:'#A092BA', accent:'#BBA2F0', hover:'#CDB8F7', deep:'#C6AEF5', on:'#231F2A' } }
+];
+const PAL_KEYS = ['--bg','--panel','--surface','--white','--border','--text','--strong','--muted','--accent','--accent-hover','--deep','--soft','--on','--ovl','--shadow','--shadow-hover','--glow','--glow-text'];
+let curPal = store.get('palette') || 'pink';
+const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+
+function palVars(p, dark) {
+  const c = dark ? p.dark : p.light, v = {};
+  v['--bg'] = c.bg; v['--panel'] = c.panel; v['--surface'] = c.surface; v['--white'] = c.white; v['--border'] = c.border;
+  v['--text'] = c.text; v['--strong'] = c.strong; v['--muted'] = c.muted;
+  v['--accent'] = c.accent; v['--accent-hover'] = c.hover; v['--deep'] = c.deep; v['--on'] = c.on;
+  if (dark) {
+    v['--soft'] = hexA(c.accent, .16); v['--ovl'] = hexA(c.white, .94);
+    v['--shadow'] = `0 0 0 1px ${hexA(c.accent, .14)},0 16px 44px -10px ${hexA(c.accent, .28)}`;
+    v['--shadow-hover'] = `0 0 0 1px ${hexA(c.accent, .3)},0 16px 44px -10px ${hexA(c.accent, .45)}`;
+    v['--glow'] = `0 0 10px ${hexA(c.accent, .45)},0 0 22px ${hexA(c.accent, .18)}`;
+    v['--glow-text'] = `0 0 8px ${hexA(c.accent, .45)}`;
+  } else {
+    v['--soft'] = c.soft;
+    v['--shadow'] = `0 12px 30px -8px ${hexA(c.deep, .18)}`;
+    v['--shadow-hover'] = `0 12px 30px -8px ${hexA(c.deep, .32)}`;
+  }
+  return v;
+}
+
+function applyPalette() {
+  const st = document.documentElement.style;
+  PAL_KEYS.forEach(k => st.removeProperty(k));
+  const p = PAL.find(x => x.id === curPal);
+  if (p && p.light) {
+    const v = palVars(p, document.documentElement.getAttribute('data-theme') === 'dark');
+    for (const k in v) st.setProperty(k, v[k]);
+  }
+  document.querySelectorAll('#palList .pal').forEach(b => b.classList.toggle('on', b.dataset.id === curPal));
+}
+
+// Card colors: override the style-guide tokens inside the generated HTML
+let curCardPal = store.get('cardPal') || 'pink';
+function cardPaletteCss(id) {
+  const p = PAL.find(x => x.id === id);
+  if (!p || !p.light) return '';
+  const block = dark => {
+    const v = palVars(p, dark), c = dark ? p.dark : p.light;
+    const m = { '--page-bg': c.bg, '--card-bg': c.panel, '--surface': c.surface, '--surface-solid': c.white, '--border': c.border,
+      '--text': c.text, '--text-strong': c.strong, '--text-muted': c.muted, '--text-sub': c.text,
+      '--accent': c.accent, '--accent-hover': c.hover, '--accent-deep': c.deep, '--accent-soft': v['--soft'], '--on-accent': c.on, '--shadow-card': v['--shadow'] };
+    if (dark) {
+      m['--glow'] = v['--glow']; m['--glow-text'] = v['--glow-text'];
+      m['--glow-svg'] = `drop-shadow(0 0 3px ${hexA(c.accent, .75)}) drop-shadow(0 0 8px ${hexA(c.accent, .35)})`;
+    }
+    return Object.keys(m).map(k => k + ':' + m[k]).join(';');
+  };
+  return `<style id="card-palette">html:root[data-theme="light"]{${block(false)}}html:root[data-theme="dark"]{${block(true)}}</style>`;
+}
+function applyCardPalette(html, id) {
+  const css = cardPaletteCss(id);
+  if (!css) return html;
+  const i = html.lastIndexOf('</body>');
+  return i >= 0 ? html.slice(0, i) + css + html.slice(i) : html + css;
+}
+
+PAL.forEach(p => {
+  const b = document.createElement('button');
+  b.className = 'pal'; b.dataset.id = p.id; b.title = p.name; b.setAttribute('aria-label', p.name); b.style.background = p.sw;
+  b.onclick = () => { curPal = p.id; store.set('palette', p.id); applyPalette(); closePal(); };
+  $('palList').appendChild(b);
+});
+PAL.forEach(p => {
+  const b = document.createElement('button');
+  b.dataset.id = p.id; b.title = p.name + ' cards'; b.setAttribute('aria-label', p.name + ' cards'); b.style.background = p.sw;
+  b.onclick = () => { curCardPal = p.id; store.set('cardPal', p.id); markCardPal(); };
+  $('cardPalList').appendChild(b);
+});
+function markCardPal() { document.querySelectorAll('#cardPalList button').forEach(b => b.classList.toggle('on', b.dataset.id === curCardPal)); }
+markCardPal();
+function closePal() { $('palList').classList.remove('open'); $('palBtn').setAttribute('aria-expanded', 'false'); }
+$('palBtn').onclick = e => {
+  e.stopPropagation();
+  const o = $('palList').classList.toggle('open');
+  $('palBtn').setAttribute('aria-expanded', o);
+};
+document.addEventListener('click', e => { if (!e.target.closest('.themewrap')) closePal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePal(); });
+
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  $('themeSw').setAttribute('aria-checked', t === 'dark');
+  store.set('theme', t);
+  applyPalette();
+}
+$('themeSw').onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+applyTheme(store.get('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+
+function renderChips() {
+  const box = $('chips'); box.innerHTML = '';
+  links.forEach((l, i) => {
+    const c = document.createElement('div'); c.className = 'chip';
+    c.innerHTML = '<span></span><button title="Remove">&times;</button>';
+    c.firstChild.textContent = l; c.firstChild.title = l;
+    c.lastChild.onclick = () => { links.splice(i, 1); renderChips(); };
+    box.appendChild(c);
+  });
+  files.forEach((f, i) => {
+    const c = document.createElement('div'); c.className = 'chip file';
+    c.innerHTML = '<span></span><button title="Remove">&times;</button>';
+    c.firstChild.textContent = f.name;
+    c.lastChild.onclick = () => { files.splice(i, 1); renderChips(); };
+    box.appendChild(c);
+  });
+}
+
+$('linkInput').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const v = e.target.value.trim(); if (!v) return;
+  let u; try { u = new URL(/^https?:\/\//i.test(v) ? v : 'https://' + v); } catch { msg('Invalid link.'); return; }
+  if (!links.includes(u.href)) links.push(u.href);
+  e.target.value = ''; msg(''); renderChips();
+});
+
+$('btnUpload').onclick = () => $('fileInput').click();
+async function addFiles(list) {
+  for (const f of list) {
+    try { files.push(await readFile(f)); } catch (err) { msg(err.message); }
+  }
+  renderChips();
+}
+$('fileInput').onchange = async e => { await addFiles([...e.target.files]); e.target.value = ''; };
+
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+const dragOff = () => { dragDepth = 0; $('composer').classList.remove('drag'); };
+window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $('composer').classList.add('drag'); });
+window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; if (--dragDepth <= 0) dragOff(); });
+window.addEventListener('drop', e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); dragOff();
+  if (document.querySelector('dialog[open]')) return;
+  addFiles([...e.dataTransfer.files]);
+});
+
+const TEXT_EXT = /\.(txt|md|csv|html?|json)$/i;
+function readFile(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    if (TEXT_EXT.test(f.name) || f.type.startsWith('text/')) {
+      r.onload = () => res({ name: f.name, kind: 'text', data: r.result });
+      r.readAsText(f);
+    } else if (f.type === 'application/pdf' || f.type.startsWith('image/') || f.type.startsWith('audio/')) {
+      if (f.size > 18 * 1024 * 1024) return rej(new Error(`"${f.name}" is too large (max ~18MB).`));
+      r.onload = () => res({ name: f.name, kind: 'inline', mime: f.type, data: r.result.split(',')[1] });
+      r.readAsDataURL(f);
+    } else rej(new Error(`The format of "${f.name}" is not supported. Convert docx/pptx to PDF first.`));
+    r.onerror = () => rej(r.error);
+  });
+}
+
+$('btnSum').onclick = () => start('tom-tat');
+$('btnKeep').onclick = () => start('giu-nguyen');
+
+let pdfLibP = null;
+function loadPdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib);
+  return pdfLibP || (pdfLibP = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+    sc.onload = () => res(window.PDFLib);
+    sc.onerror = () => { pdfLibP = null; rej(new Error('Could not load the PDF library. Check your connection.')); };
+    document.head.appendChild(sc);
+  }));
+}
+
+function parseRanges(str, total) {
+  const set = new Set();
+  const parts = str.replace(/\s*-\s*/g, '-').split(/[,;\s]+/).filter(Boolean);
+  if (!parts.length) throw new Error('Enter a page range, e.g. 1-10, 12.');
+  for (const part of parts) {
+    let a, b, m;
+    if ((m = part.match(/^(\d*)-(\d*)$/)) && (m[1] || m[2])) { a = m[1] ? +m[1] : 1; b = m[2] ? +m[2] : total; }
+    else if (/^\d+$/.test(part)) a = b = +part;
+    else throw new Error('Invalid page range: "' + part + '". Use e.g. 1-10, 12, 15-');
+    if (a > b) [a, b] = [b, a];
+    for (let n = Math.max(a, 1); n <= Math.min(b, total); n++) set.add(n - 1);
+  }
+  return [...set].sort((x, y) => x - y);
+}
+
+async function slicePdf(f, range) {
+  const { PDFDocument } = await loadPdfLib();
+  const bytes = Uint8Array.from(atob(f.data), c => c.charCodeAt(0));
+  const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const total = src.getPageCount();
+  const idx = parseRanges(range, total);
+  if (!idx.length) throw new Error('"' + f.name + '" has ' + total + ' pages, so the range ' + range + ' is outside it.');
+  const out = await PDFDocument.create();
+  (await out.copyPages(src, idx)).forEach(pg => out.addPage(pg));
+  return Object.assign({}, f, { data: await out.saveAsBase64(), name: f.name + ' (pp. ' + range + ')' });
+}
+
+$('pgOn').onchange = () => { $('pgRange').disabled = !$('pgOn').checked; if ($('pgOn').checked) $('pgRange').focus(); };
+
+async function start(action) {
+  if (!store.get('gk')) { msg('Enter your Gemini API key in Settings first.'); $('btnSettings').click(); return; }
+  const pending = $('linkInput').value.trim();
+  if (pending) $('linkInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+  const pasted = $('textInput').value.trim();
+  if (!links.length && !files.length && !pasted) { msg('Paste some text, upload a file, or add at least one link.'); return; }
+  let usedFiles = [...files], usedLinks = [...links], pages = '';
+  if (usedLinks.some(isPdfLink)) {
+    $('btnSum').disabled = $('btnKeep').disabled = true; msg('Downloading PDF...');
+    const rest = [];
+    for (const l of usedLinks) {
+      const pdf = isPdfLink(l) ? await fetchPdf(l) : null;
+      if (pdf) usedFiles.push(pdf); else rest.push(l);
+    }
+    usedLinks = rest; msg('');
+    $('btnSum').disabled = $('btnKeep').disabled = false;
+  }
+  if ($('pgOn').checked) {
+    pages = $('pgRange').value.trim();
+    try {
+      parseRanges(pages, 100000);
+      if (usedFiles.some(f => f.mime === 'application/pdf')) {
+        $('btnSum').disabled = $('btnKeep').disabled = true; msg('Cutting PDF pages...');
+        usedFiles = await Promise.all(usedFiles.map(f => f.mime === 'application/pdf' ? slicePdf(f, pages) : f));
+        msg('');
+      }
+    } catch (e) { msg(e.message || String(e)); return; }
+    finally { $('btnSum').disabled = $('btnKeep').disabled = false; }
+  }
+  const snapshot = { text: pasted, action, mode, pages, notices: $('noticeInput').value.trim(), folderId: $('folderSel').value || null, links: usedLinks, files: usedFiles };
+  snapshot.diagrams = extractDiagrams(snapshot);
+  snapshot.cardPal = curCardPal;
+  const job = { id: uuid(), status: 'run', snapshot };
+  jobs.unshift(job);
+  links = []; files = []; $('textInput').value = ''; renderChips(); msg('');
+  renderAll();
+  run(job);
+}
+
+// ---------- Diagrams: mermaid parsing + in-page graph renderer ----------
+function parseMermaid(src) {
+  const lines = src.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('%%'));
+  const head = lines.shift() || '';
+  const hm = head.match(/^(?:flowchart|graph)\s*(TD|TB|LR|RL|BT)?\b/i);
+  if (!hm) return null;
+  const dir = (hm[1] || 'TD').toUpperCase().replace('TB', 'TD');
+  const nodes = new Map(); const edges = [];
+  const CLOSE = { '[[': ']]', '((': '))', '([': '])', '[(': ')]', '{{': '}}', '[': ']', '(': ')', '{': '}', '>': ']' };
+  const OPEN = /^(\[\[|\(\(|\(\[|\[\(|\{\{|\[|\(|\{|>)/;
+  const clean = t => t.replace(/<br\s*\/?>/gi, ' ').replace(/^["']|["']$/g, '').replace(/\s+/g, ' ').trim();
+  function node(s) {
+    const m = s.match(/^\s*([^\s\[\](){}&|<>=;"'-][^\s\[\](){}&|<>=;"']*)/);
+    if (!m) return null;
+    const id = m[1]; let rest = s.slice(m[0].length); let label = null;
+    const o = rest.match(OPEN);
+    if (o) {
+      const close = CLOSE[o[1]]; let body = rest.slice(o[1].length);
+      let end;
+      if (body[0] === '"') { const q = body.indexOf('"', 1); end = body.indexOf(close, q < 0 ? 0 : q); }
+      else end = body.indexOf(close);
+      if (end < 0) return null;
+      label = clean(body.slice(0, end)); rest = body.slice(end + close.length);
+    }
+    rest = rest.replace(/^:::\w+/, '');
+    if (!nodes.has(id)) nodes.set(id, { id, label: label || id });
+    else if (label) nodes.get(id).label = label;
+    return { id, rest };
+  }
+  function group(s) {
+    const ids = []; let r = s;
+    for (;;) {
+      const n = node(r); if (!n) return null;
+      ids.push(n.id); r = n.rest;
+      const a = r.match(/^\s*&\s*/);
+      if (a) r = r.slice(a[0].length); else break;
+    }
+    return { ids, rest: r };
+  }
+  const OP1 = /^\s*(?:--|==)\s+([^>|]+?)\s+(?:-->|---|==>)\s*/;
+  const OP2 = /^\s*(<?(?:-{2,}|={2,}|-\.+-|\.+-)[>xo]?)\s*(?:\|([^|]*)\|)?\s*/;
+  for (const raw of lines) {
+    if (/^(subgraph|end|classDef|class|style|linkStyle|click|direction)\b/i.test(raw)) {
+      if (/^subgraph\b/i.test(raw)) return null;
+      continue;
+    }
+    for (const stmt of raw.split(';')) {
+      let r = stmt.trim(); if (!r) continue;
+      let g = group(r); if (!g) return null;
+      let prev = g.ids; r = g.rest;
+      while (r.trim()) {
+        let label = '', dashed = false, m = r.match(OP1);
+        if (m) { label = clean(m[1]); r = r.slice(m[0].length); }
+        else if ((m = r.match(OP2))) { label = m[2] ? clean(m[2]) : ''; dashed = /\./.test(m[1]); r = r.slice(m[0].length); }
+        else return null;
+        const nx = group(r); if (!nx) return null;
+        prev.forEach(a => nx.ids.forEach(b => edges.push({ from: a, to: b, label, dashed })));
+        prev = nx.ids; r = nx.rest;
+      }
+    }
+  }
+  if (!nodes.size) return null;
+  return { dir, nodes: [...nodes.values()], edges };
+}
+
+function extractDiagrams(snap) {
+  const texts = [snap.text || ''];
+  (snap.files || []).forEach(f => { if (f.kind === 'text') texts.push(f.data); });
+  const out = {}; let n = 0;
+  texts.join('\n').replace(/```\s*mermaid\s*\n([\s\S]*?)```/gi, (_, body) => {
+    const g = parseMermaid(body);
+    if (g) out['D' + (++n)] = g;
+    return '';
+  });
+  return out;
+}
+
+function graphRenderer() {
+  if (window.__graphRenderer) return; window.__graphRenderer = 1;
+  const NS = 'http://www.w3.org/2000/svg';
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const specs = () => {
+    const o = Object.assign({}, window.__GRAPHS || {});
+    const t = document.getElementById('graph-specs');
+    if (t) { try { Object.assign(o, JSON.parse(t.textContent)); } catch (e) {} }
+    return o;
+  };
+  function wrap(t, max) {
+    const words = String(t).split(/\s+/), lines = []; let cur = '';
+    words.forEach(w => { if (cur && (cur + ' ' + w).length > max) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; });
+    if (cur) lines.push(cur); return lines;
+  }
+  function build(g) {
+    const rawDir = (g.dir || 'TD').toUpperCase();
+    const LR = rawDir === 'LR' || rawDir === 'RL', flip = rawDir === 'BT' || rawDir === 'RL';
+    const N = (g.nodes || []).map(n => {
+      const lines = wrap(n.label || n.id, 26), sub = n.sub ? String(n.sub) : '';
+      const cw = Math.max(...lines.map(l => l.length), sub.length * .85) * 5.9 + 24;
+      const w = Math.max(84, Math.min(200, cw)), h = 14 + lines.length * 13 + (sub ? 12 : 0) + 6;
+      return Object.assign({}, n, { lines, sub, w, h, c: LR ? h : w, m: LR ? w : h });
+    });
+    const byId = {}; N.forEach(n => byId[n.id] = n);
+    const E = (g.edges || []).filter(e => byId[e.from] && byId[e.to] && e.from !== e.to);
+    const state = {}, back = new Set();
+    const dfs = u => { state[u] = 1; E.forEach((e, k) => { if (e.from !== u) return; if (state[e.to] === 1) back.add(k); else if (!state[e.to]) dfs(e.to); }); state[u] = 2; };
+    const hasIn = {}; E.forEach(e => hasIn[e.to] = 1);
+    N.filter(n => !hasIn[n.id]).concat(N).forEach(n => { if (!state[n.id]) dfs(n.id); });
+    const F = E.filter((e, k) => !back.has(k));
+    N.forEach(n => n.layer = 0);
+    for (let i = 0; i < N.length; i++) F.forEach(e => { byId[e.to].layer = Math.max(byId[e.to].layer, byId[e.from].layer + 1); });
+    const L = []; N.forEach(n => { (L[n.layer] = L[n.layer] || []).push(n); });
+    const pos = () => L.forEach(l => l.forEach((n, i) => n.o = i));
+    pos();
+    const bary = (n, nb) => { const a = nb.map(x => x.o); return a.length ? a.reduce((s, v) => s + v, 0) / a.length : n.o; };
+    for (let it = 0; it < 4; it++) {
+      for (let i = 1; i < L.length; i++) { L[i].forEach(n => n.b = bary(n, F.filter(e => e.to === n.id).map(e => byId[e.from]))); L[i].sort((a, b) => a.b - b.b || a.o - b.o); pos(); }
+      for (let i = L.length - 2; i >= 0; i--) { L[i].forEach(n => n.b = bary(n, F.filter(e => e.from === n.id).map(e => byId[e.to]))); L[i].sort((a, b) => a.b - b.b || a.o - b.o); pos(); }
+    }
+    const cg = LR ? 18 : 26, mg = LR ? 78 : 54;
+    const ext = L.map(l => l.reduce((s, n) => s + n.c, 0) + cg * (l.length - 1));
+    const W = Math.max(...ext); let mOff = 0;
+    L.forEach((l, i) => {
+      const mm = Math.max(...l.map(n => n.m)); let c = (W - ext[i]) / 2;
+      l.forEach(n => { n.cp = c + n.c / 2; n.mp = mOff + mm / 2; c += n.c + cg; });
+      mOff += mm + mg;
+    });
+    const total = mOff - mg;
+    N.forEach(n => {
+      let a = n.cp, b = n.mp; if (flip) b = total - b;
+      n.x = LR ? b : a; n.y = LR ? a : b;
+    });
+    const sgn = flip ? -1 : 1;
+    const outs = {}, ins = {};
+    E.forEach((e, k) => { e.k = k; (outs[e.from] = outs[e.from] || []).push(e); (ins[e.to] = ins[e.to] || []).push(e); });
+    const cross = n => LR ? n.y : n.x;
+    const anchor = (list, n, key, side) => {
+      list.sort((a, b) => cross(byId[a[key]]) - cross(byId[b[key]]));
+      list.forEach((e, i) => { e['p' + side] = (i + 1) / (list.length + 1); });
+    };
+    Object.keys(outs).forEach(id => anchor(outs[id].filter((e, i, arr) => !back.has(e.k)), byId[id], 'to', 's'));
+    Object.keys(ins).forEach(id => anchor(ins[id].filter(e => !back.has(e.k)), byId[id], 'from', 't'));
+    let svg = '';
+    const pts = [];
+    E.forEach(e => {
+      const a = byId[e.from], b = byId[e.to];
+      let d, mx, my;
+      if (back.has(e.k)) {
+        const off = 46;
+        if (LR) { const x1 = a.x, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2; d = `M${x1} ${y1} C${x1} ${y1 + off},${x2} ${y2 + off},${x2} ${y2}`; mx = (x1 + x2) / 2; my = Math.max(y1, y2) + off * .75; }
+        else { const x1 = a.x + a.w / 2, y1 = a.y, x2 = b.x + b.w / 2, y2 = b.y; d = `M${x1} ${y1} C${x1 + off} ${y1},${x2 + off} ${y2},${x2} ${y2}`; mx = Math.max(x1, x2) + off * .75; my = (y1 + y2) / 2; }
+      } else if (LR) {
+        const x1 = a.x + sgn * a.w / 2, y1 = a.y - a.h / 2 + a.h * (e.ps || .5), x2 = b.x - sgn * b.w / 2, y2 = b.y - b.h / 2 + b.h * (e.pt || .5), dx = (x2 - x1) / 2;
+        d = `M${x1} ${y1} C${x1 + dx} ${y1},${x2 - dx} ${y2},${x2} ${y2}`; mx = (x1 + x2) / 2; my = (y1 + y2) / 2;
+      } else {
+        const x1 = a.x - a.w / 2 + a.w * (e.ps || .5), y1 = a.y + sgn * a.h / 2, x2 = b.x - b.w / 2 + b.w * (e.pt || .5), y2 = b.y - sgn * b.h / 2, dy = (y2 - y1) / 2;
+        d = `M${x1} ${y1} C${x1} ${y1 + dy},${x2} ${y2 - dy},${x2} ${y2}`; mx = (x1 + x2) / 2; my = (y1 + y2) / 2;
+      }
+      const dash = back.has(e.k) || e.dashed ? ' stroke-dasharray="4 3"' : '';
+      svg += `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="1.6"${dash} marker-end="url(#ga)"/>`;
+      if (e.label) {
+        const w = e.label.length * 5.2 + 8;
+        svg += `<rect x="${mx - w / 2}" y="${my - 8}" width="${w}" height="14" rx="3" fill="var(--card-bg)"/><text x="${mx}" y="${my + 2.5}" text-anchor="middle" font-size="8" fill="var(--text-sub)">${esc(e.label)}</text>`;
+      }
+    });
+    let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    N.forEach(n => {
+      const x = n.x - n.w / 2, y = n.y - n.h / 2;
+      minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x + n.w); maxY = Math.max(maxY, y + n.h);
+      const stroke = ({ ok: 'var(--ok)', info: 'var(--info)', warn: 'var(--warn)', danger: 'var(--danger)', accent: 'var(--accent-deep)' })[n.kind] || 'var(--accent-deep)';
+      svg += `<rect x="${x}" y="${y}" width="${n.w}" height="${n.h}" rx="5" fill="var(--surface-solid)" stroke="${stroke}" stroke-width="1.5"/>`;
+      const top = n.y - (n.lines.length * 13 + (n.sub ? 12 : 0)) / 2 + 10;
+      svg += `<text text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-strong)">` + n.lines.map((l, i) => `<tspan x="${n.x}" y="${top + i * 13}">${esc(l)}</tspan>`).join('') + '</text>';
+      if (n.sub) svg += `<text x="${n.x}" y="${top + n.lines.length * 13 + 1}" text-anchor="middle" font-size="8" fill="var(--text-muted)">${esc(n.sub)}</text>`;
+    });
+    const pad = 14;
+    return `<svg xmlns="${NS}" viewBox="${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%"><defs><marker id="ga" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>${svg}</svg>`;
+  }
+  function render() {
+    const S = specs();
+    document.querySelectorAll('[data-graph-ref]:not([data-graph-done])').forEach(el => {
+      const g = S[el.getAttribute('data-graph-ref')]; if (!g) return;
+      try { el.innerHTML = build(g); el.setAttribute('data-graph-done', '1'); if (el.clientHeight < 140) el.style.minHeight = '260px'; } catch (e) {}
+    });
+  }
+  render();
+  document.addEventListener('DOMContentLoaded', render);
+  new MutationObserver(render).observe(document.documentElement, { childList: true, subtree: true });
+}
+
+function injectGraphs(html, specs) {
+  const data = JSON.stringify(specs).replace(/</g, '\\u003c');
+  const tag = '<script>window.__GRAPHS=' + data + ';(' + graphRenderer.toString() + ')();<\/script>';
+  const i = html.lastIndexOf('</body>');
+  return i >= 0 ? html.slice(0, i) + tag + html.slice(i) : html + tag;
+}
+
+function missingGraphs(html, specs) {
+  return Object.keys(specs).filter(k => !new RegExp('data-graph-ref\\s*=\\s*["\']?' + k + '(?![A-Za-z0-9])').test(html));
+}
+
+// ---------- Deck shell (built by the app; Gemini only writes card content) ----------
+const DECK_CSS = `
+:root,:root[data-theme="light"]{
+  --page-bg:#F8F4EE;--card-bg:#FAF7F2;--surface:#F4EFEA;--surface-solid:#FFFFFF;--border:#EBDED6;
+  --text:#383331;--text-strong:#2C2A29;--text-muted:#8C7A75;--text-sub:#4A4442;
+  --accent:#E89CAE;--accent-hover:#D88B9D;--accent-deep:#A64B5E;--accent-soft:#F4D3DA;--on-accent:#FFFFFF;
+  --ok:#5E8360;--ok-soft:#A4C2A5;--warn:#E89C38;--danger:#D85A5A;--danger-soft:#E06A6A;--info:#2B6CB0;--yellow:#ECC94B;
+  --shadow-card:0 12px 30px -8px rgba(216,139,157,.15);--glow:none;--glow-text:none;--glow-svg:none;
+}
+:root[data-theme="dark"]{
+  --page-bg:#232323;--card-bg:#2D2D2D;--surface:#363033;--surface-solid:#3D3539;--border:#4A3C42;
+  --text:#F3D9E0;--text-strong:#FFB8CB;--text-muted:#A58C95;--text-sub:#E8C4CF;
+  --accent:#FF9DB8;--accent-hover:#FFB3C8;--accent-deep:#FF8FAE;--accent-soft:rgba(255,157,184,.16);--on-accent:#2D2D2D;
+  --ok:#8FD69A;--ok-soft:#6FB67A;--warn:#FFC15E;--danger:#FF7A85;--danger-soft:#FF909A;--info:#7FB2FF;--yellow:#FFD966;
+  --shadow-card:0 0 0 1px rgba(255,157,184,.14),0 16px 44px -10px rgba(255,143,177,.28);
+  --glow:0 0 10px rgba(255,143,177,.45),0 0 22px rgba(255,143,177,.18);--glow-text:0 0 8px rgba(255,157,184,.45);
+  --glow-svg:drop-shadow(0 0 3px rgba(255,157,184,.75)) drop-shadow(0 0 8px rgba(255,143,177,.35));
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--page-bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+:root{--card-w:min(520px,88vw,calc(100vh - 150px))}
+.toolbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;background:var(--page-bg);flex-wrap:wrap}
+.tb{display:inline-flex;align-items:center;gap:6px;border-radius:12px;font-size:12px;font-weight:600;padding:8px 14px;cursor:pointer;border:1px solid var(--border);font-family:inherit}
+.tb.sec{background:var(--surface-solid);color:var(--accent-deep)}
+.tb.sec:hover{border-color:var(--accent)}
+.tb.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.tb.pri:hover{background:var(--accent-hover)}
+:root[data-theme="dark"] .tb.pri{box-shadow:var(--glow)}
+.tb kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--text-muted);background:var(--surface)}
+.dots{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;max-width:42vw}
+.dots button{height:8px;width:8px;border-radius:999px;border:0;padding:0;background:var(--accent);opacity:.5;cursor:pointer;transition:width .2s}
+.dots button.on{width:20px;background:var(--accent-deep);opacity:1}
+:root[data-theme="dark"] .dots button.on{box-shadow:var(--glow)}
+@media(max-width:560px){.tb .tx{display:none}.tb kbd{display:none}}
+.track{flex:1;display:flex;align-items:center;gap:20px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:smooth;overscroll-behavior-x:contain;padding:16px calc(50vw - var(--card-w)/2);scrollbar-width:none}
+.track::-webkit-scrollbar{display:none}
+.track .insta-card{scroll-snap-align:center}
+.track.v{flex-direction:column;overflow:visible;scroll-snap-type:none;padding:16px;align-items:center}
+html:has(.track.v){scroll-snap-type:y proximity}
+.insta-card{flex:none;width:var(--card-w);aspect-ratio:1/1;background:var(--card-bg);border:1px solid var(--border);box-shadow:var(--shadow-card);border-radius:16px;padding:20px;overflow:hidden;display:flex;flex-direction:column}
+@media(min-width:768px){.insta-card{padding:24px}}
+.c-head{padding-bottom:10px;border-bottom:1px solid var(--border)}
+.c-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.badge{background:var(--accent-soft);color:var(--accent-deep);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:999px;padding:2px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75%}
+:root[data-theme="dark"] .badge{border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);box-shadow:var(--glow)}
+.counter{color:var(--text-muted);font-size:12px;font-weight:600;white-space:nowrap}
+.c-title{margin:0;color:var(--text-strong);font-weight:800;font-size:1rem;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media(min-width:768px){.c-title{font-size:1.125rem}}
+:root[data-theme="dark"] .c-title{text-shadow:var(--glow-text)}
+.card-body{flex:1;min-height:0;overflow-y:auto;padding:10px 4px 8px 0;display:flex;flex-direction:column;gap:8px;font-size:.8rem;line-height:1.35}
+@media(min-width:640px){.card-body{font-size:.85rem;line-height:1.4}}
+.custom-scrollbar::-webkit-scrollbar{width:3px}
+.custom-scrollbar::-webkit-scrollbar-track{background:var(--card-bg)}
+.custom-scrollbar::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px}
+.c-foot{padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px}
+.c-foot .t{display:flex;align-items:center;gap:8px;color:var(--text-muted);min-width:0}
+.c-foot .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+:root[data-theme="dark"] .c-dot{box-shadow:var(--glow)}
+.c-label{color:var(--accent-deep);font-weight:700;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+:root[data-theme="dark"] .c-label{text-shadow:var(--glow-text)}
+.card-body p{margin:0}
+.illus{flex:none;height:7rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px}
+.illus.tall{height:8.5rem}
+.illus svg{display:block;width:100%;height:100%}
+.illus-fill{flex:1;min-height:200px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;display:flex}
+.illus-fill>*{flex:1;min-width:0}
+.illus-fill svg{display:block;width:100%;height:100%}
+.sec-title{position:relative;margin:0;padding-left:8px;font-size:.85rem;font-weight:800;color:var(--text-strong)}
+.sec-title::before{content:'';position:absolute;left:0;top:2px;bottom:2px;width:2px;border-radius:2px;background:var(--accent)}
+:root[data-theme="dark"] .sec-title::before{box-shadow:var(--glow)}
+.bul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:11.5px;line-height:1.4}
+.bul li{position:relative;padding-left:13px}
+.bul li::before{content:'';position:absolute;left:2px;top:.55em;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.cell{background:var(--surface-solid);border:1px solid var(--border);border-radius:4px}
+.glow{filter:var(--glow-svg)}
+.illus-fill{position:relative}
+.illus-fill>.fig-img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain;background:#fff;border-radius:4px}
+.fig-img{display:block;max-width:100%;height:auto;background:#fff;border-radius:6px}
+.cap{margin:0;font-size:11px;line-height:1.35;color:var(--text-muted);font-style:italic}
+.card-body table{width:100%;border-collapse:collapse;font-size:11px}
+.card-body th,.card-body td{border:1px solid var(--border);padding:3px 6px;text-align:left}
+.card-body th{background:var(--surface);color:var(--text-strong)}
+.katex-display{overflow-x:auto;overflow-y:hidden;margin:.45em 0}
+.hl{background:var(--accent-soft);color:var(--accent-deep);font-weight:700;padding:0 3px;border-radius:3px}
+:root[data-theme="dark"] .hl{text-shadow:var(--glow-text)}
+`;
+
+function parseDeck(text) {
+  const t = text.replace(/^```[a-z]*\s*$/gim, '');
+  if (!/^@@CARD\b/m.test(t)) return null;
+  const deck = { title: '', lang: '', label: '', ui: {}, cards: [], graphs: {}, ended: false };
+  let cur = null, mode = 'none', graph = null;
+  for (const line of t.split(/\r?\n/)) {
+    const m = line.match(/^@@([A-Za-z]+)\s*(.*)$/);
+    if (m) {
+      const k = m[1].toUpperCase(), v = m[2].trim();
+      if (k === 'TITLE') { deck.title = v; continue; }
+      if (k === 'LANG') { deck.lang = v; continue; }
+      if (k === 'LABEL') { deck.label = v; continue; }
+      if (k === 'UI') { v.split('|').forEach(p => { const i = p.indexOf('='); if (i > 0) deck.ui[p.slice(0, i).trim()] = p.slice(i + 1).trim(); }); continue; }
+      if (k === 'CARD') { cur = { badge: '', title: '', label: '', body: '' }; deck.cards.push(cur); mode = 'meta'; graph = null; continue; }
+      if (k === 'BODY') { mode = 'body'; continue; }
+      if (k === 'GRAPH') { graph = { id: v, json: '' }; mode = 'graph'; cur = null; continue; }
+      if (k === 'ENDGRAPH') { if (graph) { try { deck.graphs[graph.id] = JSON.parse(graph.json); } catch (e) {} } graph = null; mode = 'none'; continue; }
+      if (k === 'END') { deck.ended = true; break; }
+    }
+    if (mode === 'meta' && cur) {
+      const mm = line.match(/^(badge|title|label)\s*:\s*(.*)$/i);
+      if (mm) cur[mm[1].toLowerCase()] = mm[2].trim();
+    } else if (mode === 'body' && cur) cur.body += line + '\n';
+    else if (mode === 'graph' && graph) graph.json += line + '\n';
+  }
+  const fixMath = b => b.replace(/\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$/g, m => m.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+  deck.cards.forEach(c => { c.body = fixMath(c.body); });
+  deck.cards = deck.cards.filter(c => c.body.trim());
+  return deck.cards.length ? deck : null;
+}
+
+// ---------- Source figures (cropped from attached PDF/images) + PDF links ----------
+let pdfjsP = null;
+function loadPdfJs() {
+  if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions.workerSrc) return Promise.resolve(window.pdfjsLib);
+  return pdfjsP || (pdfjsP = (async () => {
+    const base = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/';
+    await new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = base + 'pdf.min.js'; sc.onload = res;
+      sc.onerror = () => rej(new Error('Could not load the PDF renderer. Check your connection.'));
+      document.head.appendChild(sc);
+    });
+    const w = await (await fetch(base + 'pdf.worker.min.js')).blob();
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(w);
+    return window.pdfjsLib;
+  })().catch(e => { pdfjsP = null; throw e; }));
+}
+
+const pdfDocCache = new Map();
+async function getPdfDoc(f) {
+  const k = f.name + ':' + f.data.length;
+  if (!pdfDocCache.has(k)) {
+    const lib = await loadPdfJs();
+    pdfDocCache.set(k, lib.getDocument({ data: Uint8Array.from(atob(f.data), c => c.charCodeAt(0)) }).promise);
+  }
+  return pdfDocCache.get(k);
+}
+
+function parseBox(str) {
+  let v = String(str || '').split(/[\s,]+/).filter(Boolean).map(Number);
+  if (v.length !== 4 || v.some(isNaN)) return [0, 0, 1000, 1000];
+  if (Math.max(...v) <= 1.5) v = v.map(n => n * 1000);
+  const pad = 15;
+  const y0 = Math.max(0, v[0] - pad), x0 = Math.max(0, v[1] - pad), y1 = Math.min(1000, v[2] + pad), x1 = Math.min(1000, v[3] + pad);
+  return (y1 <= y0 || x1 <= x0) ? [0, 0, 1000, 1000] : [y0, x0, y1, x1];
+}
+
+async function cropFigure(f, pageNo, boxStr) {
+  const [y0, x0, y1, x1] = parseBox(boxStr);
+  let src, W, H;
+  if (f.mime.startsWith('image/')) {
+    const img = new Image(); img.src = 'data:' + f.mime + ';base64,' + f.data; await img.decode();
+    src = img; W = img.naturalWidth; H = img.naturalHeight;
+  } else {
+    const pdf = await getPdfDoc(f);
+    const page = await pdf.getPage(Math.min(Math.max(pageNo || 1, 1), pdf.numPages));
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.max(1.5, Math.min(4, 1500 / Math.max(base.width * (x1 - x0) / 1000, 1)));
+    const vp = page.getViewport({ scale });
+    const cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+    await page.render({ canvasContext: cv.getContext('2d'), viewport: vp, intent: 'print' }).promise;
+    src = cv; W = cv.width; H = cv.height;
+  }
+  const sx = Math.round(x0 / 1000 * W), sy = Math.round(y0 / 1000 * H);
+  const sw = Math.max(1, Math.round((x1 - x0) / 1000 * W)), sh = Math.max(1, Math.round((y1 - y0) / 1000 * H));
+  const out = document.createElement('canvas'); out.width = sw; out.height = sh;
+  const ctx = out.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, sw, sh);
+  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+  return out.toDataURL('image/png');
+}
+
+async function materializeFigures(deck, files, setStage) {
+  const inl = files.filter(f => f.kind === 'inline' && (f.mime === 'application/pdf' || f.mime.startsWith('image/')));
+  let n = 0;
+  for (const c of deck.cards) {
+    if (!/data-src\s*=/.test(c.body)) continue;
+    const doc = new DOMParser().parseFromString('<body>' + c.body + '</body>', 'text/html');
+    for (const el of [...doc.querySelectorAll('[data-src]')]) {
+      setStage('Extracting figure ' + (++n) + '...');
+      let repl;
+      try {
+        const f = inl[(parseInt(el.getAttribute('data-src'), 10) || 1) - 1];
+        if (!f) throw new Error('no file');
+        const img = doc.createElement('img');
+        img.className = 'fig-img'; img.alt = el.getAttribute('data-alt') || 'Figure from the source';
+        img.src = await cropFigure(f, parseInt(el.getAttribute('data-page'), 10) || 1, el.getAttribute('data-box'));
+        repl = img;
+      } catch (e) {
+        repl = doc.createElement('p'); repl.className = 'cap'; repl.textContent = '[Original figure could not be extracted]';
+      }
+      el.replaceWith(repl);
+    }
+    c.body = doc.body.innerHTML;
+  }
+}
+
+const isPdfLink = l => /^https?:\/\/(www\.)?arxiv\.org\/(abs|pdf|html)\//i.test(l) || /\.pdf($|[?#])/i.test(l);
+function bufToB64(buf) {
+  const b = new Uint8Array(buf); let s = '';
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+async function fetchPdf(l) {
+  const m = l.match(/arxiv\.org\/(?:abs|pdf|html)\/([^?#]+?)(?:\.pdf)?\/?(?:[?#].*)?$/i);
+  const u = m ? 'https://arxiv.org/pdf/' + m[1] : l;
+  try {
+    const r = await fetch(u);
+    if (!r.ok) return null;
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength > 18 * 1024 * 1024) return null;
+    if (String.fromCharCode(...new Uint8Array(buf.slice(0, 5))) !== '%PDF-') return null;
+    return { name: (m ? 'arXiv ' + m[1] : (u.split('/').pop().split('?')[0] || 'document')).replace(/\.pdf$/i, '') + '.pdf', kind: 'inline', mime: 'application/pdf', data: bufToB64(buf) };
+  } catch (e) { return null; }
+}
+
+function deckRuntime() {
+  const D = window.__DECK, cards = D.cards, N = cards.length, UI = D.ui;
+  const pad = n => String(n).padStart(2, '0');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const track = document.getElementById('track'), bar = document.getElementById('toolbar');
+  let vertical = false, cur = 0, io = null;
+  track.innerHTML = cards.map((c, i) =>
+    `<article class="insta-card" data-i="${i}"><header class="c-head"><div class="c-top"><span class="badge">${pad(i + 1)}. ${esc(c.badge)}</span><span class="counter">${pad(i + 1)} / ${pad(N)}</span></div><h2 class="c-title">${esc(c.title)}</h2></header><div class="card-body custom-scrollbar">${c.body}</div><footer class="c-foot"><div class="t"><span class="c-dot"></span><span class="n">${esc(D.title)}</span></div><span class="c-label">${esc(c.label || D.label)}</span></footer></article>`
+  ).join('');
+  bar.innerHTML =
+    `<button class="tb sec" id="bPrev"><i class="fa-solid fa-chevron-left"></i><span class="tx">${esc(UI.prev)}</span></button>` +
+    `<div class="dots" id="dots">${cards.map((_, i) => `<button data-i="${i}" aria-label="${i + 1}"></button>`).join('')}</div>` +
+    `<button class="tb pri" id="bNext"><span class="tx">${esc(UI.next)}</span><i class="fa-solid fa-chevron-right"></i></button>` +
+    `<button class="tb sec" id="bLay"></button>` +
+    `<button class="tb sec" id="bFull" title="${esc(UI.fullscreen)} (F)"><i class="fa-solid fa-expand"></i><span class="tx">${esc(UI.fullscreen)}</span><kbd>F</kbd></button>`;
+  const dots = [...bar.querySelectorAll('#dots button')];
+  const mark = i => { cur = i; dots.forEach((d, k) => d.classList.toggle('on', k === i)); };
+  const goTo = i => { i = (i + N) % N; track.children[i].scrollIntoView({ behavior: 'smooth', inline: 'center', block: vertical ? 'center' : 'nearest' }); mark(i); };
+  const observe = () => {
+    if (io) io.disconnect();
+    io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) mark(+e.target.dataset.i); }), { root: vertical ? null : track, threshold: .6 });
+    [...track.children].forEach(c => io.observe(c));
+  };
+  const layBtn = () => {
+    document.getElementById('bLay').innerHTML = vertical
+      ? `<i class="fa-solid fa-arrows-left-right"></i><span class="tx">${esc(UI.horizontal)}</span>`
+      : `<i class="fa-solid fa-arrows-up-down"></i><span class="tx">${esc(UI.vertical)}</span>`;
+  };
+  dots.forEach(d => d.onclick = () => goTo(+d.dataset.i));
+  document.getElementById('bPrev').onclick = () => goTo(cur - 1);
+  document.getElementById('bNext').onclick = () => goTo(cur + 1);
+  document.getElementById('bLay').onclick = () => {
+    vertical = !vertical; track.classList.toggle('v', vertical); layBtn(); observe();
+    setTimeout(() => goTo(cur), 60);
+  };
+  const de = document.documentElement, rf = de.requestFullscreen || de.webkitRequestFullscreen;
+  const toggleFull = () => {
+    if (!rf) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else rf.call(de);
+  };
+  if (!rf) document.getElementById('bFull').style.display = 'none';
+  document.getElementById('bFull').onclick = toggleFull;
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleFull(); return; }
+    const nx = vertical ? 'ArrowDown' : 'ArrowRight', pv = vertical ? 'ArrowUp' : 'ArrowLeft';
+    if (e.key === nx) { e.preventDefault(); goTo(cur + 1); } else if (e.key === pv) { e.preventDefault(); goTo(cur - 1); }
+  });
+  layBtn(); observe(); mark(0);
+  const math = () => {
+    if (!window.renderMathInElement) return;
+    try {
+      renderMathInElement(track, { delimiters: [{ left: '$$', right: '$$', display: true }, { left: '\\[', right: '\\]', display: true }, { left: '\\(', right: '\\)', display: false }], throwOnError: false });
+    } catch (e) {}
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', math); else math();
+}
+
+function buildDeckHtml(deck, mode) {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const ui = Object.assign({ prev: 'Prev', next: 'Next', horizontal: 'Horizontal', vertical: 'Vertical', fullscreen: 'Fullscreen' }, deck.ui);
+  const data = { title: deck.title, ui, label: deck.label, cards: deck.cards.map(c => ({ badge: c.badge, title: c.title, label: c.label, body: c.body.trim() })) };
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
+  return '<!DOCTYPE html><html lang="' + esc(deck.lang || 'en') + '" data-theme="' + (mode === 'dark' ? 'dark' : 'light') + '"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(deck.title || 'Cards') + '</title>' +
+    '<script src="https://cdn.tailwindcss.com"><\/script>' +
+    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">' +
+    '<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">' +
+    '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">' +
+    '<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script><script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"><\/script>' +
+    '<style>' + DECK_CSS + '</style></head><body><div class="toolbar" id="toolbar"></div><main id="track" class="track"></main>' +
+    '<script>window.__DECK=' + json + ';(' + deckRuntime.toString() + ')();<\/script></body></html>';
+}
+
+// ---------- Gemini ----------
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let thinkIdx = 0;
+
+function thinkingVariants() {
+  const sp = store.get('sp', 'balanced');
+  if (sp === 'quality') return [null];
+  return [
+    { thinkingLevel: sp === 'fast' ? 'minimal' : 'low' },
+    { thinkingBudget: sp === 'fast' ? 512 : 2048 },
+    null
+  ];
+}
+
+async function callGemini(snap, note, onStage) {
+  const key = store.get('gk');
+  const model = modelName();
+  const guide = store.get('gg') || DEFAULT_GUIDE;
+
+  const inl = snap.files.filter(f => f.kind === 'inline' && (f.mime === 'application/pdf' || f.mime.startsWith('image/')));
+  const head = `ACTION: ${snap.action}\n\n` +
+    (inl.length ? 'TỆP ĐÍNH KÈM (số thứ tự dùng cho data-src của hình):\n' + inl.map((f, i) => (i + 1) + ': ' + f.name).join('\n') + '\n\n' : '') +
+    (snap.pages ? 'GIỚI HẠN TRANG: người dùng chỉ muốn dùng các trang ' + snap.pages + ' của tài liệu PDF. Tệp PDF đính kèm đã được cắt sẵn chỉ gồm các trang đó, hãy dùng toàn bộ nội dung của nó và không nhắc tới trang khác. Với link tới PDF, chỉ đọc và dùng đúng các trang này.\n\n' : '') +
+    (snap.notices ? 'LƯU Ý THÊM CỦA NGƯỜI DÙNG (hãy làm theo; nếu lưu ý yêu cầu rõ ràng khác với quy tắc mặc định thì ưu tiên lưu ý của người dùng, nhưng vẫn phải giữ đúng giao thức đầu ra @@):\n' + snap.notices + '\n\n' : '') +
+    (snap.links.length ? 'LINK NGUỒN:\n' + snap.links.map(l => '- ' + l).join('\n') + '\n\n' : '') +
+    'Hãy tạo bộ card từ toàn bộ nguồn bên dưới/đính kèm, trả về đúng giao thức đầu ra. Giữ nguyên ngôn ngữ của nguồn, không dịch.';
+  const ids = Object.keys(snap.diagrams || {});
+  const dg = ids.length ? '\n\nSƠ ĐỒ ĐÃ ĐƯỢC TRÍCH CHÍNH XÁC TỪ NGUỒN (dữ liệu chuẩn, không được sửa, không được bỏ; chỉ cần đặt vào card):\n' +
+    ids.map(k => k + ': ' + JSON.stringify(snap.diagrams[k])).join('\n') +
+    '\nVới mỗi sơ đồ Dn ở trên, đặt đúng một phần tử <div data-graph-ref="Dn"></div> bên trong <div class="illus-fill"> của một card hình riêng. Ứng dụng sẽ tự vẽ đủ mọi ô và mũi tên. KHÔNG vẽ tay SVG cho các sơ đồ này.' : '';
+  const parts = [{ text: head + dg }];
+  if (note) parts.push({ text: note });
+  if (snap.text) parts.push({ text: `\n--- VĂN BẢN DÁN TRỰC TIẾP ---\n${snap.text}` });
+  for (const f of snap.files) {
+    if (f.kind === 'text') parts.push({ text: `\n--- NỘI DUNG TỆP: ${f.name} ---\n${f.data}` });
+    else parts.push({ inline_data: { mime_type: f.mime, data: f.data } });
+  }
+  const body = {
+    system_instruction: { parts: [{ text: guide + EXTRA }] },
+    contents: [{ role: 'user', parts }]
+  };
+  if (snap.links.length) body.tools = [{ url_context: {} }];
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+  const variants = thinkingVariants();
+  let vi = Math.min(thinkIdx, variants.length - 1), busy = 0;
+  for (;;) {
+    body.generationConfig = { temperature: snap.action === 'giu-nguyen' ? 0.15 : 0.4, maxOutputTokens: 60000 };
+    if (variants[vi]) body.generationConfig.thinkingConfig = variants[vi];
+    onStage('Waiting for Gemini...');
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      let m = errText; try { m = JSON.parse(errText).error.message; } catch {}
+      if (r.status === 400 && /think/i.test(m) && vi < variants.length - 1) { vi++; thinkIdx = vi; continue; }
+      if ((r.status === 429 || r.status === 503) && busy < 2) { busy++; onStage('Gemini is busy, retrying...'); await sleep(4000 * busy); continue; }
+      throw new Error(`Error ${r.status}: ${m}`);
+    }
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '', text = '', finish = '';
+    onStage('Thinking...');
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        let j; try { j = JSON.parse(payload); } catch { continue; }
+        if (j.error) throw new Error(j.error.message || 'Stream error');
+        const cand = j.candidates && j.candidates[0];
+        if (cand) {
+          if (cand.content && cand.content.parts) cand.content.parts.forEach(p => { if (p.text && !p.thought) text += p.text; });
+          if (cand.finishReason) finish = cand.finishReason;
+        }
+        if (!text && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Blocked: ' + j.promptFeedback.blockReason);
+      }
+      if (text) {
+        const n = (text.match(/^@@CARD\b/gm) || []).length;
+        onStage(n ? `Writing card ${n}...` : 'Writing...');
+      }
+    }
+    if (!text.trim()) throw new Error('Gemini returned no content.');
+    return { text, truncated: finish === 'MAX_TOKENS' };
+  }
+}
+
+function extractHtml(text) {
+  let t = text.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const a = t.search(/<!DOCTYPE html|<html/i);
+  if (a < 0) throw new Error('Unexpected response format from Gemini. Please try again.');
+  t = t.slice(a);
+  const b = t.lastIndexOf('</html>');
+  if (b > 0) t = t.slice(0, b + 7);
+  return t;
+}
+
+const stageText = j => (j.stage || 'Starting...') + (j.t0 ? ' · ' + Math.round((Date.now() - j.t0) / 1000) + 's' : '');
+function refreshJobText(j) {
+  const el = document.querySelector('[data-job="' + j.id + '"] .t');
+  if (el) el.textContent = stageText(j);
+}
+setInterval(() => jobs.forEach(j => { if (j.status === 'run') refreshJobText(j); }), 1000);
+
+async function run(job) {
+  job.status = 'run'; job.error = null; job.t0 = Date.now(); job.stage = 'Starting...'; renderAll();
+  const setStage = s => { job.stage = s; refreshJobText(job); };
+  try {
+    const dgs = job.snapshot.diagrams || {};
+    let deck = null, html = null, note = '', warn = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { text, truncated } = await callGemini(job.snapshot, note, setStage);
+      deck = parseDeck(text); html = null; warn = '';
+      let all;
+      if (deck) {
+        if (truncated && !deck.ended) {
+          if (deck.cards.length > 1) { deck.cards.pop(); warn = 'Output was cut off after ' + deck.cards.length + ' cards'; }
+          else throw new Error('The result was cut off because it was too long. Try splitting the sources.');
+        }
+        all = deck.cards.map(c => c.body).join('\n');
+      } else {
+        html = extractHtml(text);
+        if (truncated && !/<\/html>/i.test(html)) throw new Error('The result was cut off because it was too long. Try splitting the sources.');
+        all = html;
+      }
+      const miss = missingGraphs(all, dgs);
+      if (!miss.length) break;
+      warn = (warn ? warn + '; ' : '') + 'Diagram(s) missing: ' + miss.join(', ');
+      note = 'LẦN TRƯỚC BẠN ĐÃ BỎ SÓT các sơ đồ: ' + miss.join(', ') + '. Hãy tạo lại toàn bộ bộ card và PHẢI đặt đủ <div data-graph-ref="..."></div> cho mọi sơ đồ.';
+    }
+    let title;
+    if (deck) {
+      title = deck.title || 'New card set';
+      await materializeFigures(deck, job.snapshot.files, setStage);
+      html = buildDeckHtml(deck, job.snapshot.mode);
+      html = injectGraphs(html, Object.assign({}, deck.graphs, dgs));
+    } else {
+      const tm = html.match(/<title>([^<]*)<\/title>/i);
+      title = (tm && tm[1].trim()) || 'New card set';
+      html = injectGraphs(html, dgs);
+    }
+    html = applyCardPalette(html, job.snapshot.cardPal);
+    let fid = job.snapshot.folderId;
+    if (!fid || !folders.find(f => f.id === fid)) {
+      const fo = { id: uuid(), name: title, created: Date.now(), updated: Date.now() };
+      await dbPut('folders', fo); folders.unshift(fo); fid = fo.id;
+    }
+    const item = {
+      id: job.id, created: Date.now(), updated: Date.now(), html, folderId: fid, title,
+      mode: job.snapshot.mode, action: job.snapshot.action, warn
+    };
+    await dbPut('items', item);
+    jobs = jobs.filter(j => j !== job);
+    items.unshift(item);
+  } catch (e) {
+    job.status = 'err'; job.error = e.message || String(e);
+  }
+  renderAll();
+}
+
+// ---------- Gallery ----------
+const ro = new ResizeObserver(es => es.forEach(en => {
+  const f = en.target.querySelector('iframe');
+  if (f) f.style.transform = `scale(${en.contentRect.width / 700})`;
+}));
+
+const FOLDER_SVG = '<svg viewBox="0 0 96 96"><path d="M8 24a6 6 0 0 1 6-6h22l8 9h38a6 6 0 0 1 6 6v39a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z" fill="var(--accent)"/><path d="M8 38h80v31a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z" fill="var(--accent-hover)" opacity=".55"/></svg>';
+
+function iconBtn(cls, label, html, fn) {
+  const b = document.createElement('button'); b.className = cls; b.title = label; b.innerHTML = html;
+  b.onclick = e => { e.stopPropagation(); fn(); };
+  return b;
+}
+
+function jobTile(j) {
+  const t = document.createElement('div');
+  if (j.status === 'run') {
+    t.className = 'tile pending';
+    t.dataset.job = j.id;
+    t.innerHTML = '<div class="spin"></div><div class="t"></div>';
+    t.querySelector('.t').textContent = stageText(j);
+  } else {
+    t.className = 'tile error';
+    t.innerHTML = '<div class="t">Could not create</div><div class="e"></div><div class="row" style="justify-content:center"><button class="btn" data-a="retry">Retry</button><button class="btn danger" data-a="drop">Dismiss</button></div>';
+    t.querySelector('.e').textContent = j.error;
+    t.querySelector('[data-a=retry]').onclick = () => run(j);
+    t.querySelector('[data-a=drop]').onclick = () => { jobs = jobs.filter(x => x !== j); renderAll(); };
+  }
+  return t;
+}
+
+function renderCrumb() {
+  const c = $('crumb'); c.innerHTML = '';
+  if (!curFolder) { c.innerHTML = '<h2>Library</h2>'; return; }
+  const f = folders.find(x => x.id === curFolder);
+  const back = document.createElement('button'); back.className = 'back'; back.textContent = '← Library';
+  back.onclick = () => { curFolder = null; renderAll(); };
+  const h = document.createElement('h2'); h.textContent = '/ ' + f.name;
+  const r = document.createElement('button'); r.className = 'btn'; r.textContent = 'Rename folder';
+  r.onclick = () => renameFolder(f.id);
+  c.append(back, h, r);
+}
+
+function renderFolderSel() {
+  const sel = $('folderSel'); const prev = sel.value;
+  sel.innerHTML = '<option value="">+ New folder (auto-named)</option>';
+  folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.name; sel.appendChild(o); });
+  sel.value = curFolder || (folders.find(f => f.id === prev) ? prev : '');
+}
+
+function renderGrid() {
+  const g = $('grid'); ro.disconnect(); g.innerHTML = '';
+  if (!curFolder) {
+    jobs.filter(j => !j.snapshot.folderId).forEach(j => g.appendChild(jobTile(j)));
+    folders.forEach(f => {
+      const n = items.filter(i => i.folderId === f.id).length;
+      const t = document.createElement('div'); t.className = 'tile folder';
+      t.innerHTML = FOLDER_SVG + '<div class="fn"></div><small></small>';
+      t.querySelector('.fn').textContent = f.name;
+      t.querySelector('small').textContent = n + (n === 1 ? ' card set' : ' card sets');
+      t.append(iconBtn('ren', 'Rename', '&#9998;', () => renameFolder(f.id)), iconBtn('del', 'Delete folder', '&times;', () => removeFolder(f.id)));
+      t.onclick = () => { curFolder = f.id; renderAll(); };
+      g.appendChild(t);
+    });
+    if (!folders.length && !jobs.length) g.innerHTML = '<div class="empty">No folders yet. Upload a file or paste a link, then press Summarize / Keep original.</div>';
+    return;
+  }
+  jobs.filter(j => j.snapshot.folderId === curFolder).forEach(j => g.appendChild(jobTile(j)));
+  const list = items.filter(i => i.folderId === curFolder);
+  list.forEach(it => {
+    const t = document.createElement('div'); t.className = 'tile';
+    const f = document.createElement('iframe');
+    f.setAttribute('sandbox', 'allow-scripts'); f.loading = 'lazy'; f.srcdoc = it.html; f.tabIndex = -1;
+    const info = document.createElement('div'); info.className = 'info';
+    info.innerHTML = '<b></b><small></small>';
+    info.firstChild.textContent = it.title;
+    info.lastChild.textContent = `${it.action === 'tom-tat' ? 'Summarize' : 'Keep original'} · ${it.mode === 'dark' ? 'Dark' : 'Light'} · ${new Date(it.created).toLocaleDateString('en-US')}${it.warn ? ' · ⚠ ' + it.warn : ''}`;
+    t.append(f, info, iconBtn('ren', 'Rename', '&#9998;', () => renameItem(it.id)), iconBtn('del', 'Delete', '&times;', () => removeItem(it.id)));
+    t.onclick = () => openItem(it.id);
+    g.appendChild(t); ro.observe(t);
+  });
+  if (!list.length && !jobs.some(j => j.snapshot.folderId === curFolder)) g.innerHTML = '<div class="empty">This folder is empty.</div>';
+}
+
+function renderAll() {
+  if (curFolder && !folders.find(f => f.id === curFolder)) curFolder = null;
+  renderCrumb(); renderFolderSel(); renderGrid();
+}
+
+async function renameFolder(id) {
+  const f = folders.find(x => x.id === id); if (!f) return;
+  const n = prompt('New folder name:', f.name); if (n === null || !n.trim()) return;
+  f.name = n.trim(); f.updated = Date.now(); await dbPut('folders', f); renderAll();
+}
+async function renameItem(id) {
+  const it = items.find(x => x.id === id); if (!it) return;
+  const n = prompt('New card set name:', it.title); if (n === null || !n.trim()) return;
+  it.title = n.trim(); it.updated = Date.now();
+  it.html = it.html.replace(/<title>[^<]*<\/title>/i, '<title>' + it.title.replace(/[<>&]/g, '') + '</title>');
+  await dbPut('items', it);
+  if (openId === id) $('vTitle').textContent = it.title;
+  renderAll();
+}
+async function removeFolder(id) {
+  const f = folders.find(x => x.id === id); if (!f) return;
+  const inside = items.filter(i => i.folderId === id);
+  if (!confirm(`Delete folder "${f.name}"${inside.length ? ` and its ${inside.length} card set(s)` : ''}?`)) return;
+  for (const i of inside) await dbDel('items', i.id);
+  await dbDel('folders', id);
+  items = items.filter(i => i.folderId !== id);
+  folders = folders.filter(x => x.id !== id);
+  renderAll();
+}
+async function removeItem(id) {
+  const it = items.find(i => i.id === id); if (!it) return;
+  if (!confirm(`Delete "${it.title}"?`)) return;
+  await dbDel('items', id);
+  items = items.filter(i => i.id !== id);
+  if (openId === id) $('viewer').close();
+  renderAll();
+}
+
+function openItem(id) {
+  const it = items.find(i => i.id === id); if (!it) return;
+  openId = id;
+  $('vTitle').textContent = it.title;
+  $('vFrame').srcdoc = it.html;
+  const m = $('vMove'); m.innerHTML = '';
+  folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = 'Folder: ' + f.name; m.appendChild(o); });
+  m.value = it.folderId;
+  $('viewer').showModal();
+}
+$('vMove').onchange = async e => {
+  const it = items.find(i => i.id === openId); if (!it) return;
+  it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll();
+};
+if (!document.documentElement.requestFullscreen && !document.documentElement.webkitRequestFullscreen) $('vFull').style.display = 'none';
+function toggleViewerFull() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  else { const f = $('vFrame'); (f.requestFullscreen || f.webkitRequestFullscreen).call(f); }
+}
+$('vFull').onclick = toggleViewerFull;
+document.addEventListener('keydown', e => {
+  if (!$('viewer').open || e.key.toLowerCase() !== 'f' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  e.preventDefault(); toggleViewerFull();
+});
+$('vTab').onclick = () => {
+  const it = items.find(i => i.id === openId); if (!it) return;
+  const esc = it.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const wrap = '<!DOCTYPE html><meta charset="utf-8"><title>' + it.title.replace(/[<>&]/g, '') + '</title><body style="margin:0;background:#232323"><iframe sandbox="allow-scripts" allow="fullscreen" style="position:fixed;inset:0;width:100%;height:100%;border:0" srcdoc="' + esc + '"></iframe><script>addEventListener("keydown",function(e){if(e.key.toLowerCase()==="f"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){var f=document.querySelector("iframe");document.fullscreenElement?document.exitFullscreen():f.requestFullscreen()}})<\/script>';
+  const url = URL.createObjectURL(new Blob([wrap], { type: 'text/html' }));
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
+$('vRename').onclick = () => openId && renameItem(openId);
+$('vClose').onclick = () => $('viewer').close();
+$('viewer').addEventListener('close', () => { $('vFrame').srcdoc = ''; openId = null; });
+$('vDelete').onclick = () => openId && removeItem(openId);
+$('vDownload').onclick = () => {
+  const it = items.find(i => i.id === openId); if (!it) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([it.html], { type: 'text/html' }));
+  a.download = it.title.replace(/[\\/:*?"<>|]+/g, '').trim().replace(/\s+/g, '-') + '.html';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
+// ---------- Backup ----------
+const stamp = e => e.updated || e.created || 0;
+$('btnExport').onclick = async () => {
+  const data = { app: 'micro-cards', v: 1, exported: Date.now(), folders, items };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  a.download = 'micro-cards-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+$('btnImport').onclick = () => $('importInput').click();
+$('importInput').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (d.app !== 'micro-cards' || !Array.isArray(d.items) || !Array.isArray(d.folders)) throw new Error('This is not a Micro Cards backup file.');
+    let n = 0;
+    for (const x of d.folders) { const e0 = folders.find(y => y.id === x.id); if (!e0 || stamp(x) > stamp(e0)) { await dbPut('folders', x); folders = folders.filter(y => y.id !== x.id).concat(x); n++; } }
+    for (const x of d.items) { const e0 = items.find(y => y.id === x.id); if (!e0 || stamp(x) > stamp(e0)) { await dbPut('items', x); items = items.filter(y => y.id !== x.id).concat(x); n++; } }
+    items.sort((a, b) => b.created - a.created); folders.sort((a, b) => b.created - a.created);
+    renderAll();
+    $('importMsg').textContent = 'Imported ' + n + ' item(s).';
+  } catch (err) { $('importMsg').textContent = err.message || String(err); }
+};
+
+// ---------- Settings ----------
+$('btnSettings').onclick = () => {
+  $('setKey').value = store.get('gk', '');
+  $('setModel').value = modelName();
+  $('setSpeed').value = store.get('sp', 'balanced');
+  $('setGuide').value = store.get('gg') || DEFAULT_GUIDE;
+  $('settings').showModal();
+};
+$('btnCloseSettings').onclick = () => $('settings').close();
+$('btnResetGuide').onclick = () => { $('setGuide').value = DEFAULT_GUIDE; };
+$('btnSaveSettings').onclick = () => {
+  store.set('gk', $('setKey').value.trim());
+  store.set('gm', $('setModel').value.trim() || 'gemini-3.8-flash');
+  store.set('sp', $('setSpeed').value); thinkIdx = 0;
+  const g = $('setGuide').value.trim();
+  store.set('gg', g === DEFAULT_GUIDE ? '' : g);
+  $('settings').close(); msg('');
+};
+
+// ---------- Init ----------
+Promise.all([dbAll('items'), dbAll('folders')]).then(([i, f]) => { items = i; folders = f; renderAll(); }).catch(() => { renderAll(); msg('Could not open the browser history storage.'); });
+if (!store.get('gk')) msg('Start by entering your Gemini API key in Settings.');
+</script>
+</body>
+</html>
