@@ -1033,6 +1033,18 @@ html:has(.track.v){scroll-snap-type:y proximity}
 .katex-display{overflow-x:auto;overflow-y:hidden;margin:.45em 0}
 .hl{background:var(--accent-soft);color:var(--accent-deep);font-weight:700;padding:0 3px;border-radius:3px}
 :root[data-theme="dark"] .hl{text-shadow:var(--glow-text)}
+html.fit{--card-w:min(94vw,860px);--card-h:calc(100vh - 104px)}
+@supports (height:100dvh){html.fit{--card-h:calc(100dvh - 104px)}}
+html.fit .insta-card{aspect-ratio:auto;width:var(--card-w);height:var(--card-h)}
+html.fit .illus{height:clamp(7rem,22vh,15rem)}
+html.fit .illus.tall{height:clamp(8.5rem,28vh,18rem)}
+@media(min-width:700px){
+html.fit .card-body{font-size:1rem;line-height:1.5}
+html.fit .bul{font-size:.94rem;gap:6px}
+html.fit .c-title{font-size:1.4rem}
+html.fit .badge{font-size:12px}
+html.fit .sec-title{font-size:1rem}
+}
 `;
 
 function parseDeck(text) {
@@ -1220,6 +1232,16 @@ function deckRuntime() {
     const nx = vertical ? 'ArrowDown' : 'ArrowRight', pv = vertical ? 'ArrowUp' : 'ArrowLeft';
     if (e.key === nx) { e.preventDefault(); goTo(cur + 1); } else if (e.key === pv) { e.preventDefault(); goTo(cur - 1); }
   });
+  const fitUpdate = () => {
+    const full = !!(document.fullscreenElement || document.webkitFullscreenElement) || (innerHeight >= screen.height - 4 && innerWidth >= screen.width - 4);
+    const fit = full || innerWidth < 700;
+    if (document.documentElement.classList.contains('fit') !== fit) {
+      document.documentElement.classList.toggle('fit', fit);
+      setTimeout(() => goTo(cur), 80);
+    }
+  };
+  addEventListener('resize', fitUpdate); document.addEventListener('fullscreenchange', fitUpdate); document.addEventListener('webkitfullscreenchange', fitUpdate);
+  fitUpdate();
   layBtn(); observe(); mark(0);
   const math = () => {
     if (!window.renderMathInElement) return;
