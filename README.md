@@ -3,3 +3,5 @@ No backend free app for turning PDFs, arXiv papers, links and pasted text into s
 Summarize or keep the original word for word, with math, figures and diagrams preserved.
 
 This source code is for users who want to host their own private copy and add features such as device syncing, model expansion, etc.
+No install or build step needed. Clone or download the repo, then open index.html in your browser.
+
