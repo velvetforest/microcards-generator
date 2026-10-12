@@ -143,6 +143,10 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 #viewer .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
 #viewer .bar b{flex:1;font-size:14px;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #viewer iframe{flex:1;border:0;width:100%}
+#viewer.pfull{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;inset:0}
+#viewer.pfull .bar{display:none}
+#vExit{display:none;position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:5;width:36px;height:36px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;line-height:1;padding:0}
+#viewer.pfull #vExit{display:block}
 @media (max-width:560px){
   .hdr{gap:8px}
   .themebtn .lbl,.themebtn .dot{display:none} .themebtn .ico{display:block} .themebtn{width:46px;padding:0;justify-content:center}
@@ -264,6 +268,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
     <button class="btn danger" id="vDelete">Delete</button>
     <button class="btn" id="vClose">Close</button>
   </div>
+  <button id="vExit" aria-label="Exit full screen" title="Exit full screen">&times;</button>
   <iframe id="vFrame" sandbox="allow-scripts" allow="fullscreen"></iframe>
 </dialog>
 
@@ -1546,12 +1551,14 @@ $('vMove').onchange = async e => {
   const it = items.find(i => i.id === openId); if (!it) return;
   it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll();
 };
-if (!document.documentElement.requestFullscreen && !document.documentElement.webkitRequestFullscreen) $('vFull').style.display = 'none';
+const nativeFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
 function toggleViewerFull() {
-  if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-  else { const f = $('vFrame'); (f.requestFullscreen || f.webkitRequestFullscreen).call(f); }
+  if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  if (nativeFs) { const f = $('vFrame'); (f.requestFullscreen || f.webkitRequestFullscreen).call(f); }
+  else $('viewer').classList.toggle('pfull');
 }
 $('vFull').onclick = toggleViewerFull;
+$('vExit').onclick = () => $('viewer').classList.remove('pfull');
 document.addEventListener('keydown', e => {
   if (!$('viewer').open || e.key.toLowerCase() !== 'f' || e.ctrlKey || e.metaKey || e.altKey) return;
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -1561,13 +1568,15 @@ $('vTab').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
   const esc = it.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   const wrap = '<!DOCTYPE html><meta charset="utf-8"><title>' + it.title.replace(/[<>&]/g, '') + '</title><body style="margin:0;background:#232323"><iframe sandbox="allow-scripts" allow="fullscreen" style="position:fixed;inset:0;width:100%;height:100%;border:0" srcdoc="' + esc + '"></iframe><script>addEventListener("keydown",function(e){if(e.key.toLowerCase()==="f"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){var f=document.querySelector("iframe");document.fullscreenElement?document.exitFullscreen():f.requestFullscreen()}})<\/script>';
-  const url = URL.createObjectURL(new Blob([wrap], { type: 'text/html' }));
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const blobUrl = () => { const u = URL.createObjectURL(new Blob([wrap], { type: 'text/html' })); setTimeout(() => URL.revokeObjectURL(u), 120000); return u; };
+  const w = window.open('', '_blank');
+  if (!w) { msg('Your browser blocked the new window. Allow pop-ups for this site and try again.'); $('viewer').close(); return; }
+  try { w.document.open(); w.document.write(wrap); w.document.close(); }
+  catch (e) { w.location.href = blobUrl(); }
 };
 $('vRename').onclick = () => openId && renameItem(openId);
 $('vClose').onclick = () => $('viewer').close();
-$('viewer').addEventListener('close', () => { $('vFrame').srcdoc = ''; openId = null; });
+$('viewer').addEventListener('close', () => { $('vFrame').srcdoc = ''; openId = null; $('viewer').classList.remove('pfull'); });
 $('vDelete').onclick = () => openId && removeItem(openId);
 $('vDownload').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
