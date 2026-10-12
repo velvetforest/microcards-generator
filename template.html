@@ -208,12 +208,19 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <label>Model</label>
   <input class="field" id="setModel" list="modelList" placeholder="gemini-3.8-flash">
   <datalist id="modelList"><option value="gemini-3.8-flash"></datalist>
-  <div class="hint">If you get a 404 "model no longer available" error, type the new model name suggested in the message.</div>
+  <div class="row" style="margin-top:8px"><button class="btn" id="btnModels">Load my available models</button><span class="hint" id="modelsMsg" style="margin:0"></span></div>
+  <label class="chk" style="margin-top:12px"><input type="checkbox" id="setAuto"><span>Switch to another model automatically when one is busy or slow</span></label>
   <label>Speed</label>
   <select id="setSpeed" class="field">
     <option value="fast">Fast (least thinking, quickest)</option>
     <option value="balanced">Balanced (recommended)</option>
     <option value="quality">Quality (most thinking, slowest)</option>
+  </select>
+  <label>Illustrations</label>
+  <select id="setIll" class="field">
+    <option value="none">None (fastest, text and source figures only)</option>
+    <option value="simple">Simple (small SVG on each card, recommended)</option>
+    <option value="rich">Rich (detailed SVG, slowest)</option>
   </select>
   <label>Content rules (sent with every generation)</label>
   <textarea id="setGuide" spellcheck="false"></textarea>
@@ -1121,7 +1128,8 @@ function buildDeckHtml(deck, mode) {
 
 // ---------- Gemini ----------
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-let thinkIdx = 0;
+const thinkIdxBy = {};
+const BAD_MODEL = /embedding|tts|image|live|audio|robotics|computer-use|aqa|learnlm|gemma|imagen|veo|nano|banana/i;
 
 function thinkingVariants() {
   const sp = store.get('sp', 'balanced');
@@ -1133,13 +1141,101 @@ function thinkingVariants() {
   ];
 }
 
-async function callGemini(snap, note, onStage) {
-  const key = store.get('gk');
-  const model = modelName();
-  const guide = store.get('gg') || DEFAULT_GUIDE;
+function savedModels() { try { return JSON.parse(store.get('mlist', '[]')); } catch (e) { return []; } }
 
+function modelChain() {
+  const primary = modelName();
+  if (store.get('autosw', '1') !== '1') return [primary];
+  const rank = m => /lite/.test(m) ? 1 : /pro/.test(m) ? 3 : /flash/.test(m) ? 0 : 2;
+  const list = savedModels().filter(m => m !== primary && !BAD_MODEL.test(m));
+  list.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
+  const fb = list.length ? list.slice(0, 3) : ['gemini-flash-latest', 'gemini-flash-lite-latest'].filter(m => m !== primary);
+  return [primary, ...fb];
+}
+
+const cancelErr = () => { const c = new Error('Cancelled'); c.cancelled = true; return c; };
+
+async function streamOnce(model, body, snap, onStage, signal) {
+  const key = store.get('gk');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+  const variants = thinkingVariants();
+  let vi = Math.min(thinkIdxBy[model] || 0, variants.length - 1);
+  const firstByte = store.get('sp', 'balanced') === 'quality' ? 180000 : 80000;
+  for (;;) {
+    body.generationConfig = { temperature: snap.action === 'giu-nguyen' ? 0.15 : 0.4, maxOutputTokens: 60000 };
+    if (variants[vi]) body.generationConfig.thinkingConfig = variants[vi];
+    const tc = new AbortController(); let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; tc.abort(); }, firstByte);
+    const onAbort = () => tc.abort();
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    onStage('Waiting for ' + model + '...');
+    const t0 = Date.now();
+    let r;
+    try {
+      r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: tc.signal });
+    } catch (e) {
+      clearTimeout(timer);
+      if (signal && signal.aborted) throw cancelErr();
+      const err = new Error(timedOut ? model + ' did not respond within ' + (firstByte / 1000) + 's' : (e.message || 'Network error'));
+      err.retryable = true; throw err;
+    }
+    clearTimeout(timer);
+    if (!r.ok) {
+      const errText = await r.text();
+      let m = errText; try { m = JSON.parse(errText).error.message; } catch (e) {}
+      if (r.status === 400 && /think/i.test(m) && vi < variants.length - 1) { vi++; thinkIdxBy[model] = vi; continue; }
+      const err = new Error('Error ' + r.status + ' (' + model + '): ' + m);
+      if ([404, 429, 500, 502, 503, 504].includes(r.status)) err.retryable = true;
+      throw err;
+    }
+    const tv = variants[vi], mode = tv ? Object.keys(tv)[0] + '=' + tv[Object.keys(tv)[0]] : 'default';
+    onStage(model + ': first reply after ' + Math.round((Date.now() - t0) / 1000) + 's (thinking ' + mode + ')');
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '', text = '', finish = '';
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          let j; try { j = JSON.parse(payload); } catch (e) { continue; }
+          if (j.error) { const err = new Error(j.error.message || 'Stream error'); err.retryable = [429, 500, 503].includes(j.error.code); throw err; }
+          const cand = j.candidates && j.candidates[0];
+          if (cand) {
+            if (cand.content && cand.content.parts) cand.content.parts.forEach(p => { if (p.text && !p.thought) text += p.text; });
+            if (cand.finishReason) finish = cand.finishReason;
+          }
+          if (!text && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Blocked: ' + j.promptFeedback.blockReason);
+        }
+        if (text) {
+          const n = (text.match(/^@@CARD\b/gm) || []).length;
+          onStage(model + ': ' + (n ? 'writing card ' + n + '...' : 'writing...'));
+        }
+      }
+    } catch (e) {
+      if (signal && signal.aborted) throw cancelErr();
+      throw e;
+    }
+    if (!text.trim()) { const err = new Error(model + ' returned no content.'); err.retryable = true; throw err; }
+    return { text, truncated: finish === 'MAX_TOKENS', model };
+  }
+}
+
+async function callGemini(snap, note, onStage, signal) {
+  const guide = store.get('gg') || DEFAULT_GUIDE;
   const inl = snap.files.filter(f => f.kind === 'inline' && (f.mime === 'application/pdf' || f.mime.startsWith('image/')));
-  const head = `ACTION: ${snap.action}\n\n` +
+  const ill = store.get('ill', 'simple');
+  const illTxt = ill === 'none'
+    ? 'MỨC MINH HOẠ: KHÔNG. Không vẽ SVG minh hoạ trang trí và bỏ khối minh hoạ thường. Chỉ dùng hình gốc cắt từ nguồn (fig) và sơ đồ graph khi nguồn có. Card chữ thuần được phép. Mục tiêu là tạo thật nhanh.\n\n'
+    : ill === 'simple'
+      ? 'MỨC MINH HOẠ: TỐI GIẢN. Mỗi khối SVG chỉ dùng tối đa khoảng 6 hình cơ bản, mã ngắn gọn (dưới 600 ký tự), không chi tiết trang trí. Mục tiêu là tạo nhanh.\n\n'
+      : '';
+  const head = `ACTION: ${snap.action}\n\n` + illTxt +
     (inl.length ? 'TỆP ĐÍNH KÈM (số thứ tự dùng cho data-src của hình):\n' + inl.map((f, i) => (i + 1) + ': ' + f.name).join('\n') + '\n\n' : '') +
     (snap.pages ? 'GIỚI HẠN TRANG: người dùng chỉ muốn dùng các trang ' + snap.pages + ' của tài liệu PDF. Tệp PDF đính kèm đã được cắt sẵn chỉ gồm các trang đó, hãy dùng toàn bộ nội dung của nó và không nhắc tới trang khác. Với link tới PDF, chỉ đọc và dùng đúng các trang này.\n\n' : '') +
     (snap.notices ? 'LƯU Ý THÊM CỦA NGƯỜI DÙNG (hãy làm theo; nếu lưu ý yêu cầu rõ ràng khác với quy tắc mặc định thì ưu tiên lưu ý của người dùng, nhưng vẫn phải giữ đúng giao thức đầu ra @@):\n' + snap.notices + '\n\n' : '') +
@@ -1156,61 +1252,24 @@ async function callGemini(snap, note, onStage) {
     if (f.kind === 'text') parts.push({ text: `\n--- NỘI DUNG TỆP: ${f.name} ---\n${f.data}` });
     else parts.push({ inline_data: { mime_type: f.mime, data: f.data } });
   }
-  const body = {
-    system_instruction: { parts: [{ text: guide + EXTRA }] },
-    contents: [{ role: 'user', parts }]
-  };
+  const body = { system_instruction: { parts: [{ text: guide + EXTRA }] }, contents: [{ role: 'user', parts }] };
   if (snap.links.length) body.tools = [{ url_context: {} }];
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
-  const variants = thinkingVariants();
-  let vi = Math.min(thinkIdx, variants.length - 1), busy = 0;
-  for (;;) {
-    body.generationConfig = { temperature: snap.action === 'giu-nguyen' ? 0.15 : 0.4, maxOutputTokens: 60000 };
-    if (variants[vi]) body.generationConfig.thinkingConfig = variants[vi];
-    onStage('Waiting for Gemini...');
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify(body)
-    });
-    if (!r.ok) {
-      const errText = await r.text();
-      let m = errText; try { m = JSON.parse(errText).error.message; } catch {}
-      if (r.status === 400 && /think/i.test(m) && vi < variants.length - 1) { vi++; thinkIdx = vi; continue; }
-      if ((r.status === 429 || r.status === 503) && busy < 2) { busy++; onStage('Gemini is busy, retrying...'); await sleep(4000 * busy); continue; }
-      throw new Error(`Error ${r.status}: ${m}`);
-    }
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = '', text = '', finish = '';
-    onStage('Thinking...');
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let nl;
-      while ((nl = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        let j; try { j = JSON.parse(payload); } catch { continue; }
-        if (j.error) throw new Error(j.error.message || 'Stream error');
-        const cand = j.candidates && j.candidates[0];
-        if (cand) {
-          if (cand.content && cand.content.parts) cand.content.parts.forEach(p => { if (p.text && !p.thought) text += p.text; });
-          if (cand.finishReason) finish = cand.finishReason;
-        }
-        if (!text && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('Blocked: ' + j.promptFeedback.blockReason);
-      }
-      if (text) {
-        const n = (text.match(/^@@CARD\b/gm) || []).length;
-        onStage(n ? `Writing card ${n}...` : 'Writing...');
+  const chain = modelChain();
+  let lastErr = null;
+  for (let round = 0; round < 2; round++) {
+    for (const model of chain) {
+      try { return await streamOnce(model, body, snap, onStage, signal); }
+      catch (e) {
+        if (e.cancelled) throw e;
+        if (!e.retryable) throw e;
+        lastErr = e;
+        if (chain.length > 1) onStage((e.message || 'Model busy') + '. Trying another model...');
       }
     }
-    if (!text.trim()) throw new Error('Gemini returned no content.');
-    return { text, truncated: finish === 'MAX_TOKENS' };
+    if (round === 0) { onStage('Models are busy. Retrying in 6s...'); await sleep(6000); }
   }
+  throw lastErr || new Error('Could not reach Gemini.');
 }
 
 function extractHtml(text) {
@@ -1231,13 +1290,13 @@ function refreshJobText(j) {
 setInterval(() => jobs.forEach(j => { if (j.status === 'run') refreshJobText(j); }), 1000);
 
 async function run(job) {
-  job.status = 'run'; job.error = null; job.t0 = Date.now(); job.stage = 'Starting...'; renderAll();
+  job.status = 'run'; job.error = null; job.t0 = Date.now(); job.stage = 'Starting...'; job.cancelled = false; job.abort = new AbortController(); renderAll();
   const setStage = s => { job.stage = s; refreshJobText(job); };
   try {
     const dgs = job.snapshot.diagrams || {};
     let deck = null, html = null, note = '', warn = '';
     for (let attempt = 0; attempt < 2; attempt++) {
-      const { text, truncated } = await callGemini(job.snapshot, note, setStage);
+      const { text, truncated } = await callGemini(job.snapshot, note, setStage, job.abort.signal);
       deck = parseDeck(text); html = null; warn = '';
       let all;
       if (deck) {
@@ -1281,6 +1340,7 @@ async function run(job) {
     jobs = jobs.filter(j => j !== job);
     items.unshift(item);
   } catch (e) {
+    if (job.cancelled || e.cancelled) return;
     job.status = 'err'; job.error = e.message || String(e);
   }
   renderAll();
@@ -1307,6 +1367,9 @@ function jobTile(j) {
     t.dataset.job = j.id;
     t.innerHTML = '<div class="spin"></div><div class="t"></div>';
     t.querySelector('.t').textContent = stageText(j);
+    const cb = document.createElement('button'); cb.className = 'btn'; cb.textContent = 'Cancel';
+    cb.onclick = () => { j.cancelled = true; if (j.abort) j.abort.abort(); jobs = jobs.filter(x => x !== j); renderAll(); };
+    t.appendChild(cb);
   } else {
     t.className = 'tile error';
     t.innerHTML = '<div class="t">Could not create</div><div class="e"></div><div class="row" style="justify-content:center"><button class="btn" data-a="retry">Retry</button><button class="btn danger" data-a="drop">Dismiss</button></div>';
@@ -1718,10 +1781,34 @@ if (/^#sync=\d{6}$/.test(location.hash)) {
 }
 
 // ---------- Settings ----------
+function fillModelList() {
+  $('modelList').innerHTML = '';
+  savedModels().forEach(m => { const o = document.createElement('option'); o.value = m; $('modelList').appendChild(o); });
+}
+$('btnModels').onclick = async () => {
+  const key = $('setKey').value.trim() || store.get('gk');
+  if (!key) { $('modelsMsg').textContent = 'Enter your API key first.'; return; }
+  $('modelsMsg').textContent = 'Loading...';
+  try {
+    const out = []; let tok = '';
+    do {
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200' + (tok ? '&pageToken=' + encodeURIComponent(tok) : ''), { headers: { 'x-goog-api-key': key } });
+      if (!r.ok) throw new Error('Error ' + r.status + '. Check your API key.');
+      const j = await r.json();
+      (j.models || []).forEach(m => { if ((m.supportedGenerationMethods || []).includes('generateContent') && /^models\/gemini/.test(m.name) && !BAD_MODEL.test(m.name)) out.push(m.name.replace(/^models\//, '')); });
+      tok = j.nextPageToken || '';
+    } while (tok);
+    store.set('mlist', JSON.stringify(out)); fillModelList();
+    $('modelsMsg').textContent = out.length + ' models found. Pick one in the Model box.';
+  } catch (e) { $('modelsMsg').textContent = e.message || String(e); }
+};
 $('btnSettings').onclick = () => {
   $('setKey').value = store.get('gk', '');
   $('setModel').value = modelName();
   $('setSpeed').value = store.get('sp', 'balanced');
+  $('setAuto').checked = store.get('autosw', '1') === '1';
+  $('setIll').value = store.get('ill', 'simple');
+  fillModelList();
   $('setGuide').value = store.get('gg') || DEFAULT_GUIDE;
   $('settings').showModal();
 };
@@ -1730,7 +1817,8 @@ $('btnResetGuide').onclick = () => { $('setGuide').value = DEFAULT_GUIDE; };
 $('btnSaveSettings').onclick = () => {
   store.set('gk', $('setKey').value.trim());
   store.set('gm', $('setModel').value.trim() || 'gemini-3.8-flash');
-  store.set('sp', $('setSpeed').value); thinkIdx = 0;
+  store.set('sp', $('setSpeed').value); store.set('autosw', $('setAuto').checked ? '1' : '0'); store.set('ill', $('setIll').value);
+  Object.keys(thinkIdxBy).forEach(k => delete thinkIdxBy[k]);
   const g = $('setGuide').value.trim();
   store.set('gg', g === DEFAULT_GUIDE ? '' : g);
   $('settings').close(); msg('');
