@@ -88,6 +88,13 @@ kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--bo
 .hint.bad{color:var(--danger)}
 .sy-code{font-size:40px;font-weight:800;letter-spacing:.18em;text-align:center;color:var(--strong);margin:14px 0 6px}
 #syQr{margin:8px auto;border-radius:10px;background:#fff;padding:8px}
+.sy-pairs{margin:0 0 14px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.sy-pair{display:flex;align-items:center;gap:8px;padding:6px 0}
+.sy-pair .nm{flex:1;min-width:0;font-size:13px;display:flex;flex-direction:column}
+.sy-pair small{color:var(--muted);font-size:11px}
+.sy-pair .btn{padding:5px 11px;font-size:12px;border-radius:9px}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--strong);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13px;max-width:90vw;z-index:2000;opacity:0;pointer-events:none;transition:opacity .25s;text-align:center}
+#toast.show{opacity:1}
 .sy-allow{margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .sy-allow #syAllowTxt{flex:1;min-width:150px;font-size:12.5px;font-weight:400;line-height:1.35;color:var(--text);margin:0}
 .sy-allow #syAllowTxt b{font-weight:700;color:var(--strong)}
@@ -240,9 +247,13 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   </div>
 </dialog>
 
+<div id="toast"></div>
+
 <dialog id="syncDlg">
   <h3>Sync devices</h3>
   <div class="hint" style="margin:0 0 12px">Sync your library directly between two devices. Open this page on both and keep it open. Your data goes straight from device to device, encrypted. A public relay (ntfy.sh) is used only for the first handshake and never sees your data.</div>
+  <label class="chk" style="margin:0 0 12px;font-weight:500;font-size:12.5px"><input type="checkbox" id="syRemember" checked><span>Remember the device I sync with, so it syncs automatically next time when both have this page open</span></label>
+  <div id="syPairs" class="sy-pairs" hidden><div style="font-size:12px;font-weight:700;color:var(--strong);margin-bottom:4px">Remembered devices</div><div id="syPairList"></div></div>
   <div id="syHome" class="row">
     <button class="btn primary" id="syShow">Show a code on this device</button>
     <button class="btn" id="syEnter">Enter a code from the other device</button>
@@ -1571,6 +1582,7 @@ async function run(job) {
     await dbPut('items', item);
     jobs = jobs.filter(j => j !== job);
     items.unshift(item);
+    syncSoon();
   } catch (e) {
     if (job.cancelled || e.cancelled) return;
     job.status = 'err'; job.error = e.message || String(e);
@@ -1673,7 +1685,7 @@ function renderAll() {
 async function renameFolder(id) {
   const f = folders.find(x => x.id === id); if (!f) return;
   const n = prompt('New folder name:', f.name); if (n === null || !n.trim()) return;
-  f.name = n.trim(); f.updated = Date.now(); await dbPut('folders', f); renderAll();
+  f.name = n.trim(); f.updated = Date.now(); await dbPut('folders', f); renderAll(); syncSoon();
 }
 async function renameItem(id) {
   const it = items.find(x => x.id === id); if (!it) return;
@@ -1682,7 +1694,7 @@ async function renameItem(id) {
   it.html = it.html.replace(/<title>[^<]*<\/title>/i, '<title>' + it.title.replace(/[<>&]/g, '') + '</title>');
   await dbPut('items', it);
   if (openId === id) $('vTitle').textContent = it.title;
-  renderAll();
+  renderAll(); syncSoon();
 }
 async function removeFolder(id) {
   const f = folders.find(x => x.id === id); if (!f) return;
@@ -1693,7 +1705,7 @@ async function removeFolder(id) {
   await dbPut('tomb', { id: 'folder:' + id, kind: 'folder', eid: id, deleted: Date.now(), created: Date.now() });
   items = items.filter(i => i.folderId !== id);
   folders = folders.filter(x => x.id !== id);
-  renderAll();
+  renderAll(); syncSoon();
 }
 async function removeItem(id) {
   const it = items.find(i => i.id === id); if (!it) return;
@@ -1702,7 +1714,7 @@ async function removeItem(id) {
   await dbPut('tomb', { id: 'item:' + id, kind: 'item', eid: id, deleted: Date.now(), created: Date.now() });
   items = items.filter(i => i.id !== id);
   if (openId === id) $('viewer').close();
-  renderAll();
+  renderAll(); syncSoon();
 }
 
 function openItem(id) {
@@ -1717,7 +1729,7 @@ function openItem(id) {
 }
 $('vMove').onchange = async e => {
   const it = items.find(i => i.id === openId); if (!it) return;
-  it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll();
+  it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll(); syncSoon();
 };
 const nativeFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
 function toggleViewerFull() {
@@ -1802,8 +1814,11 @@ function syReset() {
   S = null;
 }
 function syFail(msg) {
+  const silent = S && S.silent;
   if (S) S.failed = true;
-  syReset(); syStatus(msg, true); syView('syHome');
+  syReset();
+  if (silent) return;
+  syStatus(msg, true); syView('syHome');
 }
 
 const ntfyPub = (code, obj) => fetch(RELAY + topicOf(code), { method: 'POST', body: JSON.stringify(obj) });
@@ -1876,11 +1891,17 @@ async function applyEnt(kind, obj) {
 
 function checkDone() {
   if (!S || S.finished || !S.gotEnd || !S.sentEnd) return;
-  S.finished = true;
+  const s = S; s.finished = true;
   items.sort((a, b) => b.created - a.created); folders.sort((a, b) => b.created - a.created);
   renderAll();
-  syStatus('Done. Received ' + S.recv + ', sent ' + S.sent + '. You can close this window.');
-  const s = S; setTimeout(() => { if (S === s) { try { s.dc.close(); s.pc.close(); } catch (e) {} } }, 1500);
+  syStatus('Done. Received ' + s.recv + ', sent ' + s.sent + '.' + (s.pair ? '' : ' You can close this window.'));
+  if (s.pair) {
+    const ps = getPairs(), pr = ps.find(x => x.pid === s.pair.pid);
+    if (pr) { pr.last = Date.now(); setPairs(ps); }
+    renderPairs();
+    if (s.recv || s.sent) toast('Synced with ' + s.pair.name + ': received ' + s.recv + ', sent ' + s.sent + '.');
+  }
+  setTimeout(() => { try { s.dc.close(); s.pc.close(); } catch (e) {} if (S === s) S = null; }, 1500);
 }
 
 async function handleText(m) {
@@ -1897,6 +1918,13 @@ async function handleText(m) {
     S.pend = { kind: m.kind, len: m.len, got: 0, parts: [] };
   } else if (m.t === 'end') {
     S.gotEnd = true; checkDone();
+  } else if (m.t === 'ident') {
+    if (S.role === 'join' && m.pid && $('syRemember').checked) {
+      savePair({ pid: m.pid, peer: m.id, name: m.name });
+      await dcText({ t: 'paired', id: myId, name: myName() });
+    }
+  } else if (m.t === 'paired') {
+    if (S.role === 'host' && S.pid) savePair({ pid: S.pid, peer: m.id, name: m.name });
   }
 }
 async function handleBin(u8) {
@@ -1922,6 +1950,7 @@ function setupDc(dc) {
     S.tombs = new Map((await dbAll('tomb')).map(t => [t.kind + ':' + t.eid, t]));
     const man = { e: [...folders.map(x => ['folder', x.id, stamp(x)]), ...items.map(x => ['item', x.id, stamp(x)])], d: [...S.tombs.values()].map(t => [t.kind, t.eid, t.deleted]) };
     await dcText({ t: 'hello', man });
+    if (S.role === 'host' && $('syRemember').checked) { S.pid = rid() + rid() + rid(); await dcText({ t: 'ident', id: myId, name: myName(), pid: S.pid }); }
     S.markReady();
   };
   dc.onmessage = e => {
@@ -1996,9 +2025,109 @@ async function startJoin(code) {
   } catch (e) { syFail('Could not connect: ' + (e.message || e)); }
 }
 
-$('btnSync').onclick = () => { syReset(); syView('syHome'); syStatus(''); $('syCodeIn').value = ''; $('syncDlg').showModal(); };
+// ---- remembered devices: auto-sync when both devices have the page open
+const myId = (() => { let v = store.get('devid', ''); if (!v) { v = rid() + rid(); store.set('devid', v); } return v; })();
+const myName = () => devName() + ' (' + myId.slice(0, 4) + ')';
+const getPairs = () => { try { return JSON.parse(store.get('pairs', '[]')); } catch (e) { return []; } };
+const setPairs = a => store.set('pairs', JSON.stringify(a));
+const pairTopic = p => 'mcpair-' + p.pid;
+const pairPub = (p, obj) => fetch(RELAY + pairTopic(p), { method: 'POST', body: JSON.stringify(obj) });
+const pairES = new Map(), pairTry = {};
+let lastAnn = 0, annTimer = null, toastTimer = null;
+
+function toast(t) {
+  const el = $('toast'); el.textContent = t; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 5000);
+}
+
+function savePair(p) {
+  const ps = getPairs().filter(x => x.pid !== p.pid && x.peer !== p.peer);
+  ps.push({ pid: p.pid, peer: p.peer, name: p.name, last: Date.now() });
+  setPairs(ps); renderPairs(); listenPairs();
+  toast('Remembered ' + p.name + '. Next time it syncs automatically when both devices have this page open.');
+}
+
+function renderPairs() {
+  const box = $('syPairs'), ps = getPairs();
+  box.hidden = !ps.length; if (!ps.length) return;
+  const list = $('syPairList'); list.innerHTML = '';
+  ps.forEach(p => {
+    const row = document.createElement('div'); row.className = 'sy-pair';
+    const nm = document.createElement('div'); nm.className = 'nm';
+    const b = document.createElement('b'); b.textContent = p.name;
+    const sm = document.createElement('small'); sm.textContent = p.last ? 'last sync ' + new Date(p.last).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    nm.append(b, sm);
+    const go = document.createElement('button'); go.className = 'btn'; go.textContent = 'Sync now';
+    go.onclick = () => { syStatus('Contacting ' + p.name + '... Open this page on that device too.'); announce(p, true); };
+    const fg = document.createElement('button'); fg.className = 'btn'; fg.textContent = 'Forget';
+    fg.onclick = () => { pairPub(p, { t: 'forget', from: myId }).catch(() => {}); setPairs(getPairs().filter(x => x.pid !== p.pid)); listenPairs(); renderPairs(); };
+    row.append(nm, go, fg); list.appendChild(row);
+  });
+}
+
+function listenPairs() {
+  const ps = getPairs();
+  pairES.forEach((es, pid) => { if (!ps.find(p => p.pid === pid)) { es.close(); pairES.delete(pid); } });
+  ps.forEach(p => {
+    if (pairES.has(p.pid)) return;
+    const es = new EventSource(RELAY + pairTopic(p) + '/sse?since=' + (Math.floor(Date.now() / 1000) - 25));
+    es.onmessage = e => { try { const m = JSON.parse(e.data); if (m.event === 'message') onPairMsg(p, JSON.parse(m.message)); } catch (err) {} };
+    pairES.set(p.pid, es);
+  });
+}
+
+function onPairMsg(p, m) {
+  if (m.from === myId || m.from !== p.peer) return;
+  if (m.t === 'here') { if (!S && myId < p.peer) pairOffer(p); }
+  else if (m.t === 'offer') { if (!S) pairAnswer(p, m); }
+  else if (m.t === 'answer') {
+    if (S && S.role === 'pair-offer' && S.sid === m.sid && !S.answered) { S.answered = true; S.pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => syFail('Could not connect.')); }
+  } else if (m.t === 'forget') {
+    setPairs(getPairs().filter(x => x.pid !== p.pid)); listenPairs(); renderPairs();
+    toast(p.name + ' removed this pairing.');
+  }
+}
+
+async function pairOffer(p, force) {
+  if (S || (!force && Date.now() - (pairTry[p.pid] || 0) < 30000)) return;
+  pairTry[p.pid] = Date.now();
+  const mine = S = { role: 'pair-offer', pair: p, sid: rid(), silent: !$('syncDlg').open };
+  try {
+    const pc = mkPc(); mine.pc = pc;
+    setupDc(pc.createDataChannel('sync'));
+    await pc.setLocalDescription(await pc.createOffer());
+    await waitIce(pc);
+    await pairPub(p, { t: 'offer', from: myId, sid: mine.sid, sdp: slimSdp(pc.localDescription.sdp) });
+    mine.timer = setTimeout(() => { if (S === mine && !mine.open) syFail('No answer from ' + p.name + '. Open this page on that device and try again.'); }, 40000);
+  } catch (e) { syFail('Could not connect: ' + (e.message || e)); }
+}
+
+async function pairAnswer(p, m) {
+  if (S) return;
+  const mine = S = { role: 'pair-answer', pair: p, silent: !$('syncDlg').open };
+  try {
+    const pc = mkPc(); mine.pc = pc; pc.ondatachannel = e => setupDc(e.channel);
+    await pc.setRemoteDescription({ type: 'offer', sdp: m.sdp });
+    await pc.setLocalDescription(await pc.createAnswer());
+    await waitIce(pc);
+    await pairPub(p, { t: 'answer', from: myId, sid: m.sid, sdp: slimSdp(pc.localDescription.sdp) });
+    mine.timer = setTimeout(() => { if (S === mine && !mine.open) syFail('Could not connect to ' + p.name + '.'); }, 40000);
+  } catch (e) { syFail('Could not connect: ' + (e.message || e)); }
+}
+
+function announce(p, force) {
+  if (myId < p.peer) pairOffer(p, force);
+  else pairPub(p, { t: 'here', from: myId }).catch(() => {});
+}
+function announceAll() { lastAnn = Date.now(); getPairs().forEach(p => announce(p)); }
+function syncSoon() { if (!getPairs().length) return; clearTimeout(annTimer); annTimer = setTimeout(announceAll, 4000); }
+
+$('btnSync').onclick = () => {
+  if (!(S && S.pair)) { syReset(); syView('syHome'); syStatus(''); }
+  $('syCodeIn').value = ''; renderPairs(); $('syncDlg').showModal();
+};
 $('syClose').onclick = () => $('syncDlg').close();
-$('syncDlg').addEventListener('close', syReset);
+$('syncDlg').addEventListener('close', () => { if (!(S && S.pair)) syReset(); });
 $('syShow').onclick = startHost;
 $('syEnter').onclick = () => { syReset(); syView('syJoin'); syStatus(''); $('syCodeIn').focus(); };
 $('syGo').onclick = () => startJoin($('syCodeIn').value.replace(/\D/g, ''));
@@ -2011,6 +2140,9 @@ if (/^#sync=\d{6}$/.test(location.hash)) {
   history.replaceState(null, '', location.pathname + location.search);
   $('syncDlg').showModal(); $('syCodeIn').value = c; startJoin(c);
 }
+
+listenPairs(); setTimeout(announceAll, 2500);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - lastAnn > 20000) announceAll(); });
 
 // ---------- Settings ----------
 function fillModelList() {
