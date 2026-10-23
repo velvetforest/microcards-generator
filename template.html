@@ -232,6 +232,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <label>Content rules (sent with every generation)</label>
   <textarea id="setGuide" spellcheck="false"></textarea>
   <div class="hint">Card layout, colors and navigation are built into the app. These rules control only the content.</div>
+  <label class="chk" style="margin-top:14px"><input type="checkbox" id="setFs"><span>Open cards in fullscreen by default</span></label>
   <label>Backup</label>
   <div class="row">
     <button class="btn" id="btnExport">Export library</button>
@@ -1574,12 +1575,18 @@ function openItem(id) {
   folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = 'Folder: ' + f.name; m.appendChild(o); });
   m.value = it.folderId;
   $('viewer').showModal();
+  if (store.get('fs', '0') === '1') enterViewerFull();
 }
 $('vMove').onchange = async e => {
   const it = items.find(i => i.id === openId); if (!it) return;
   it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll(); syncSoon();
 };
 const nativeFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+function enterViewerFull() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;
+  if (nativeFs) { const f = $('vFrame'), pr = (f.requestFullscreen || f.webkitRequestFullscreen).call(f); if (pr && pr.catch) pr.catch(() => {}); }
+  else $('viewer').classList.add('pfull');
+}
 function toggleViewerFull() {
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
   if (nativeFs) { const f = $('vFrame'); (f.requestFullscreen || f.webkitRequestFullscreen).call(f); }
@@ -2029,6 +2036,7 @@ $('btnSettings').onclick = () => {
   $('setSpeed').value = store.get('sp', 'balanced');
   $('setAuto').checked = store.get('autosw', '1') === '1';
   $('setIll').value = store.get('ill', 'simple');
+  $('setFs').checked = store.get('fs', '0') === '1';
   fillModelList();
   $('setGuide').value = store.get('gg') || DEFAULT_GUIDE;
   $('settings').showModal();
@@ -2038,7 +2046,7 @@ $('btnResetGuide').onclick = () => { $('setGuide').value = DEFAULT_GUIDE; };
 $('btnSaveSettings').onclick = () => {
   store.set('gk', $('setKey').value.trim());
   store.set('gm', $('setModel').value.trim() || 'gemini-3.8-flash');
-  store.set('sp', $('setSpeed').value); store.set('autosw', $('setAuto').checked ? '1' : '0'); store.set('ill', $('setIll').value);
+  store.set('sp', $('setSpeed').value); store.set('autosw', $('setAuto').checked ? '1' : '0'); store.set('ill', $('setIll').value); store.set('fs', $('setFs').checked ? '1' : '0');
   Object.keys(thinkIdxBy).forEach(k => delete thinkIdxBy[k]);
   const g = $('setGuide').value.trim();
   store.set('gg', g === DEFAULT_GUIDE ? '' : g);
