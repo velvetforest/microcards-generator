@@ -124,6 +124,7 @@ h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
 .tile.pending,.tile.error{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:16px;cursor:default}
 .tile.pending:hover,.tile.error:hover{transform:none;box-shadow:none}
 .tile .t{font-size:13px;font-weight:600;color:var(--strong)}
+.tile .t2{font-size:11px;color:var(--muted);line-height:1.35}
 .tile .e{font-size:12px;color:var(--danger);max-height:90px;overflow:auto}
 .spin{width:30px;height:30px;border-radius:50%;border:3px solid var(--soft);border-top-color:var(--accent);animation:sp 1s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -1181,11 +1182,12 @@ function fmtWait(ms) { const t = Math.round(ms / 60000), h = Math.floor(t / 60),
 
 const cancelErr = () => { const c = new Error('Cancelled'); c.cancelled = true; return c; };
 
-function firstActivityMs(snap) {
+const uploadMb = snap => snap.files.reduce((n, f) => n + (f.kind === 'inline' ? f.data.length * 0.75 : 0), 0) / 1e6;
+function quietMs(snap) {
   const base = store.get('sp', 'balanced') === 'quality' ? 90000 : 35000;
-  const mb = snap.files.reduce((n, f) => n + (f.kind === 'inline' ? f.data.length * 0.75 : 0), 0) / 1e6;
-  return base + Math.min(60000, mb * 8000) + (snap.links.length ? 20000 : 0);
+  return base + (snap.links.length ? 20000 : 0);
 }
+function firstActivityMs(snap) { return quietMs(snap) + Math.min(60000, uploadMb(snap) * 8000); }
 const hedgeMs = snap => Math.round(firstActivityMs(snap) * 0.55);
 
 async function streamOnce(model, body, snap, onStage, signal, onActive) {
@@ -1199,12 +1201,29 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
     if (variants[vi]) body.generationConfig.thinkingConfig = variants[vi];
     const tc = new AbortController(); let reason = '';
     const kill = why => { reason = why; tc.abort(); };
-    const timer1 = setTimeout(() => kill('quiet'), t1), timer2 = setTimeout(() => kill('slow'), t2);
-    const done = () => { clearTimeout(timer1); clearTimeout(timer2); };
+    let timer1 = setTimeout(() => kill('quiet'), t1);
+    const timer2 = setTimeout(() => kill('slow'), t2);
+    const T = { upload: 0, wait: 0, think: 0, write: 0 };
+    let phase = null, since = 0, lastPhase = null;
+    const info = () => ({ model, t: Object.assign({}, T), phase, since });
+    const say = txt => onStage(txt, info());
+    const setPhase = (p, txt) => {
+      const now = Date.now();
+      if (phase) T[phase] += now - since;
+      phase = p; since = now; say(txt);
+    };
+    const closePhase = () => { if (phase) { T[phase] += Date.now() - since; lastPhase = phase; phase = null; } };
+    const done = () => { clearTimeout(timer1); clearTimeout(timer2); closePhase(); };
     if (signal) signal.addEventListener('abort', () => tc.abort(), { once: true });
-    onStage('Waiting for ' + model + '...');
+    const mb = uploadMb(snap);
+    setPhase('upload', mb >= 0.1 ? 'Uploading ' + mb.toFixed(1) + ' MB to ' + model + '...' : 'Sending the request to ' + model + '...');
     const t0 = Date.now();
-    const timeoutErr = () => { const e = new Error(model + (reason === 'quiet' ? ' did not respond within ' + Math.round(t1 / 1000) + 's.' : ' was too slow to answer.')); e.retryable = true; return e; };
+    const timeoutErr = () => {
+      const e = new Error(model + (reason !== 'quiet' ? ' was too slow to answer.'
+        : (phase || lastPhase) === 'upload' ? ' did not accept the request within ' + Math.round(t1 / 1000) + 's.'
+        : ' stayed silent for ' + Math.round(quietMs(snap) / 1000) + 's after accepting the request.'));
+      e.retryable = true; return e;
+    };
     let r;
     try {
       r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: tc.signal });
@@ -1233,6 +1252,8 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
       throw err;
     }
     const tv = variants[vi], mode = tv ? (tv.thinkingLevel ? 'level=' + tv.thinkingLevel : 'budget=' + tv.thinkingBudget) : 'default';
+    clearTimeout(timer1); timer1 = setTimeout(() => kill('quiet'), quietMs(snap));
+    setPhase('wait', model + ' accepted it, waiting for the first reply...');
     const reader = r.body.getReader(), dec = new TextDecoder();
     let buf = '', text = '', finish = '', active = false, answered = false;
     try {
@@ -1250,15 +1271,15 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
           if (!active) {
             active = true; clearTimeout(timer1);
             if (onActive && !onActive(model)) throw cancelErr();
-            onStage(model + ': started after ' + Math.round((Date.now() - t0) / 1000) + 's (thinking ' + mode + ')');
+            setPhase('think', model + ' is thinking (' + mode + ')...');
           }
           if (j.error) { const err = new Error(j.error.message || 'Stream error'); err.retryable = [429, 500, 503].includes(j.error.code); throw err; }
           const cand = j.candidates && j.candidates[0];
           if (cand) {
             if (cand.content && cand.content.parts) cand.content.parts.forEach(p => {
               if (!p.text) return;
-              if (p.thought) { if (!answered) onStage(model + ': thinking - ' + p.text.replace(/[*#\n]+/g, ' ').trim().slice(0, 70)); }
-              else { text += p.text; if (!answered) { answered = true; clearTimeout(timer2); } }
+              if (p.thought) { if (!answered) say(model + ' is thinking: ' + p.text.replace(/[*#\n]+/g, ' ').trim().slice(0, 60)); }
+              else { text += p.text; if (!answered) { answered = true; clearTimeout(timer2); setPhase('write', model + ' is writing...'); } }
             });
             if (cand.finishReason) finish = cand.finishReason;
           }
@@ -1266,7 +1287,7 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
         }
         if (text) {
           const n = (text.match(/^@@CARD\b/gm) || []).length;
-          onStage(model + ': ' + (n ? 'writing card ' + n + '...' : 'writing...'));
+          say(model + (n ? ' is writing card ' + n + '...' : ' is writing...'));
         }
       }
     } catch (e) {
@@ -1278,7 +1299,7 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
     }
     done();
     if (!text.trim()) { const err = new Error(model + ' returned no content.'); err.retryable = true; throw err; }
-    return { text, truncated: finish === 'MAX_TOKENS', model };
+    return { text, truncated: finish === 'MAX_TOKENS', model, timing: T };
   }
 }
 
@@ -1295,10 +1316,11 @@ function runRound(queue, body, snap, onStage, signal) {
     const launch = () => {
       if (settled || next >= queue.length) return;
       const model = queue[next++], ctl = new AbortController(); ctls.set(model, ctl);
+      const stageFor = (txt, inf) => { if (!winner || winner === model) onStage(txt, inf); };
       if (signal) signal.addEventListener('abort', () => ctl.abort(), { once: true });
       clearTimeout(hedge);
       if (next < queue.length && !winner) hedge = setTimeout(() => { onStage('Still waiting, also asking ' + queue[next] + '...'); launch(); }, hedgeMs(snap));
-      streamOnce(model, Object.assign({}, body), snap, onStage, ctl.signal, onActive)
+      streamOnce(model, Object.assign({}, body), snap, stageFor, ctl.signal, onActive)
         .then(res => finish(resolve, res))
         .catch(e => {
           ctls.delete(model);
@@ -1374,21 +1396,34 @@ function extractHtml(text) {
   return t;
 }
 
+const fmtSec = ms => (ms < 950 ? '<1' : Math.round(ms / 1000)) + 's';
+const PHASE_NAMES = [['upload', 'upload'], ['wait', 'wait'], ['think', 'think'], ['write', 'write']];
+function phaseTimes(ph) {
+  if (!ph) return null;
+  const t = Object.assign({}, ph.t);
+  if (ph.phase) t[ph.phase] = (t[ph.phase] || 0) + (Date.now() - ph.since);
+  return t;
+}
+const phaseLine = t => t ? PHASE_NAMES.filter(([k]) => t[k]).map(([k, n]) => n + ' ' + fmtSec(t[k])).join(' · ') : '';
 const stageText = j => (j.stage || 'Starting...') + (j.t0 ? ' · ' + Math.round((Date.now() - j.t0) / 1000) + 's' : '');
 function refreshJobText(j) {
-  const el = document.querySelector('[data-job="' + j.id + '"] .t');
-  if (el) el.textContent = stageText(j);
+  const tile = document.querySelector('[data-job="' + j.id + '"]');
+  if (!tile) return;
+  const a = tile.querySelector('.t'), b = tile.querySelector('.t2');
+  if (a) a.textContent = stageText(j);
+  if (b) b.textContent = phaseLine(phaseTimes(j.ph));
 }
 setInterval(() => jobs.forEach(j => { if (j.status === 'run') refreshJobText(j); }), 1000);
 
 async function run(job) {
   job.status = 'run'; job.error = null; job.t0 = Date.now(); job.stage = 'Starting...'; job.cancelled = false; job.abort = new AbortController(); renderAll();
-  const setStage = s => { job.stage = s; refreshJobText(job); };
+  const setStage = (s, inf) => { job.stage = s; if (inf) job.ph = inf; refreshJobText(job); };
   try {
     const dgs = job.snapshot.diagrams || {};
     let deck = null, html = null, note = '', warn = '';
     for (let attempt = 0; attempt < 2; attempt++) {
-      const { text, truncated } = await callGemini(job.snapshot, note, setStage, job.abort.signal);
+      const { text, truncated, model: usedModel, timing } = await callGemini(job.snapshot, note, setStage, job.abort.signal);
+      job.used = { model: usedModel, timing };
       deck = parseDeck(text); html = null; warn = '';
       let all;
       if (deck) {
@@ -1426,7 +1461,8 @@ async function run(job) {
     }
     const item = {
       id: job.id, created: Date.now(), updated: Date.now(), html, folderId: fid, title,
-      mode: job.snapshot.mode, action: job.snapshot.action, warn
+      mode: job.snapshot.mode, action: job.snapshot.action, warn,
+      gen: job.used ? { model: job.used.model, t: job.used.timing, total: Date.now() - job.t0 } : null
     };
     await dbPut('items', item);
     jobs = jobs.filter(j => j !== job);
@@ -1458,8 +1494,9 @@ function jobTile(j) {
   if (j.status === 'run') {
     t.className = 'tile pending';
     t.dataset.job = j.id;
-    t.innerHTML = '<div class="spin"></div><div class="t"></div>';
+    t.innerHTML = '<div class="spin"></div><div class="t"></div><div class="t2"></div>';
     t.querySelector('.t').textContent = stageText(j);
+    t.querySelector('.t2').textContent = phaseLine(phaseTimes(j.ph));
     const cb = document.createElement('button'); cb.className = 'btn'; cb.textContent = 'Cancel';
     cb.onclick = () => { j.cancelled = true; if (j.abort) j.abort.abort(); jobs = jobs.filter(x => x !== j); renderAll(); };
     t.appendChild(cb);
@@ -1519,6 +1556,7 @@ function renderGrid() {
     info.innerHTML = '<b></b><small></small>';
     info.firstChild.textContent = it.title;
     info.lastChild.textContent = `${it.action === 'tom-tat' ? 'Summarize' : 'Keep original'} · ${it.mode === 'dark' ? 'Dark' : 'Light'} · ${new Date(it.created).toLocaleDateString('en-US')}${it.warn ? ' · ⚠ ' + it.warn : ''}`;
+    if (it.gen) t.title = it.gen.model + ' · total ' + fmtSec(it.gen.total) + (phaseLine(it.gen.t) ? ' (' + phaseLine(it.gen.t) + ')' : '');
     t.append(f, info, iconBtn('ren', 'Rename', '&#9998;', () => renameItem(it.id)), iconBtn('del', 'Delete', '&times;', () => removeItem(it.id)));
     t.onclick = () => openItem(it.id);
     g.appendChild(t); ro.observe(t);
