@@ -1,0 +1,8 @@
+name = "microcards-generator"
+pages_build_output_dir = "public"
+compatibility_date = "2026-10-01"
+
+# Holds only ciphertext produced in the browser. See functions/api/vault/.
+[[kv_namespaces]]
+binding = "VAULT"
+id = "0f8b2efea62c44b38d0a761f99ce3186"
