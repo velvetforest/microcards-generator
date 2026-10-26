@@ -454,12 +454,13 @@ function cardPaletteCss(id) {
   return `<style id="card-palette">html:root[data-theme="light"]{${block(false)}}html:root[data-theme="dark"]{${block(true)}}</style>`;
 }
 // A deck's html is written once, so notes ride in just ahead of its runtime.
-function withNotes(html, notes, on, editable) {
+function withNotes(html, notes, on, editable, at) {
   if (!/window\.__DECK=/.test(html)) return html;
-  const payload = JSON.stringify({ map: notes || {}, on: on !== false, editable: !!editable, label: 'Notes' }).replace(/</g, '\\u003c');
+  const payload = JSON.stringify({ map: notes || {}, on: on !== false, editable: !!editable, label: 'Notes', at: at > 0 ? at : 0 }).replace(/</g, '\\u003c');
   return html.replace('<script>window.__DECK=', '<scr' + 'ipt>window.__NOTES=' + payload + ';<\/scr' + 'ipt><scr' + 'ipt>window.__DECK=');
 }
 const notesOn = () => store.get('notesOn', '1') === '1';
+const posOf = id => +store.get('pos:' + id, '0') || 0;
 
 function applyCardPalette(html, id) {
   const css = cardPaletteCss(id);
@@ -1168,7 +1169,14 @@ function deckRuntime() {
     (window.__NOTES ? `<button class="tb sec" id="bNotes"></button>` : '') +
     `<button class="tb sec" id="bFull" title="${esc(UI.fullscreen)} (F)"><i class="fa-solid fa-expand"></i><span class="tx">${esc(UI.fullscreen)}</span><kbd>F</kbd></button>`;
   const dots = [...bar.querySelectorAll('#dots button')];
-  const mark = i => { cur = i; dots.forEach((d, k) => d.classList.toggle('on', k === i)); };
+  let atTimer = null, atLast = -1;
+  const mark = i => {
+    cur = i; dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    if (i === atLast) return;
+    atLast = i;
+    clearTimeout(atTimer);
+    atTimer = setTimeout(() => { try { parent.postMessage({ mc: 'at', i: cur }, '*'); } catch (e) {} }, 400);
+  };
   const goTo = i => { i = (i + N) % N; track.children[i].scrollIntoView({ behavior: 'smooth', inline: 'center', block: vertical ? 'center' : 'nearest' }); mark(i); };
   const observe = () => {
     if (io) io.disconnect();
@@ -1317,7 +1325,15 @@ function deckRuntime() {
   if (bNotes) bNotes.onclick = () => { notesOn = !notesOn; applyNotes(); post({ mc: 'notesOn', on: notesOn }); };
   applyNotes();
 
-  layBtn(); observe(); mark(0);
+  layBtn(); observe();
+  const startAt = Math.min(Math.max((window.__NOTES && window.__NOTES.at) | 0, 0), N - 1);
+  mark(startAt); atLast = startAt;
+  if (startAt > 0) {
+    const was = track.style.scrollBehavior;
+    track.style.scrollBehavior = 'auto';          // jump, never animate through the deck
+    track.children[startAt].scrollIntoView({ inline: 'center', block: 'nearest' });
+    requestAnimationFrame(() => { track.style.scrollBehavior = was; });
+  }
   const math = () => {
     if (!window.renderMathInElement) return;
     try {
@@ -1633,6 +1649,21 @@ function refreshJobText(j) {
 }
 setInterval(() => jobs.forEach(j => { if (j.status === 'run') refreshJobText(j); }), 1000);
 
+// Nothing a model does should cost someone the files they just attached.
+function restoreInputs(snap) {
+  if (!snap) return;
+  let back = 0;
+  (snap.files || []).forEach(f => {
+    if (files.some(x => x.name === f.name && x.kind === f.kind && (x.data || '').length === (f.data || '').length)) return;
+    files.push(f); back++;
+  });
+  (snap.links || []).forEach(l => { if (!links.includes(l)) { links.push(l); back++; } });
+  if (snap.text && !$('textInput').value.trim()) { $('textInput').value = snap.text; back++; }
+  if (!back) return;
+  renderChips();
+  msg('That did not work, so your sources are back in the box. Press Retry on the card, or try again here.');
+}
+
 async function run(job) {
   job.status = 'run'; job.error = null; job.t0 = Date.now(); job.stage = 'Starting...'; job.cancelled = false; job.abort = new AbortController(); renderAll();
   const setStage = (s, inf) => { job.stage = s; if (inf) job.ph = inf; refreshJobText(job); };
@@ -1689,6 +1720,7 @@ async function run(job) {
   } catch (e) {
     if (job.cancelled || e.cancelled) return;
     job.status = 'err'; job.error = e.message || String(e);
+    restoreInputs(job.snapshot);
   }
   renderAll();
 }
@@ -1816,6 +1848,7 @@ async function removeItem(id) {
   const it = items.find(i => i.id === id); if (!it) return;
   if (!confirm(`Delete "${it.title}"?`)) return;
   await dbDel('items', id);
+  store.set('pos:' + id, '0');
   await dbPut('tomb', { id: 'item:' + id, kind: 'item', eid: id, deleted: Date.now(), created: Date.now() });
   items = items.filter(i => i.id !== id);
   if (openId === id) $('viewer').close();
@@ -1826,7 +1859,7 @@ function openItem(id) {
   const it = items.find(i => i.id === id); if (!it) return;
   openId = id;
   $('vTitle').textContent = it.title;
-  $('vFrame').srcdoc = withNotes(it.html, it.notes, notesOn(), true);
+  $('vFrame').srcdoc = withNotes(it.html, it.notes, notesOn(), true, posOf(id));
   const m = $('vMove'); m.innerHTML = '';
   folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = 'Folder: ' + f.name; m.appendChild(o); });
   m.value = it.folderId;
@@ -1838,6 +1871,7 @@ addEventListener('message', async e => {
   const m = e.data;
   if (!m || typeof m !== 'object') return;
   if (m.mc === 'notesOn') { store.set('notesOn', m.on ? '1' : '0'); return; }
+  if (m.mc === 'at') { if (Number.isInteger(m.i) && m.i >= 0 && m.i < 2000) store.set('pos:' + openId, String(m.i)); return; }
   if (m.mc !== 'notes' || !m.notes || typeof m.notes !== 'object') return;
   const it = items.find(x => x.id === openId); if (!it) return;
   const notes = Object.assign({}, it.notes);
