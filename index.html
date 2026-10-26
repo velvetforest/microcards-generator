@@ -1111,8 +1111,8 @@ html:has(.track.v){scroll-snap-type:y proximity}
 :root[data-theme="dark"] .hl{text-shadow:var(--glow-text)}
 html.fit{--card-w:min(94vw,860px);--card-h:calc(100vh - 104px)}
 @supports (height:100dvh){html.fit{--card-h:calc(100dvh - 104px)}}
-html.fit .insta-card{aspect-ratio:auto;width:var(--card-w);height:var(--card-h)}
-html.fit .illus{height:clamp(7rem,22vh,15rem)}
+html.fit .insta-card{aspect-ratio:auto;width:var(--card-w);height:auto;max-height:min(var(--card-h),calc(var(--card-w) * 1.6))}
+html.fit .illus{height:clamp(6.5rem,20vh,13rem)}
 html.fit .illus.tall{height:clamp(8.5rem,28vh,18rem)}
 @media(min-width:700px){
 html.fit .card-body{font-size:1rem;line-height:1.5}
