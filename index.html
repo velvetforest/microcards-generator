@@ -23,7 +23,7 @@
   --on:#2D2D2D; --ovl:rgba(61,53,57,.94);
   --shadow:0 0 0 1px rgba(255,157,184,.14),0 16px 44px -10px rgba(255,143,177,.28);
   --shadow-hover:0 0 0 1px rgba(255,157,184,.3),0 16px 44px -10px rgba(255,143,177,.45);
-  --glow:0 0 10px rgba(255,143,177,.45),0 0 22px rgba(255,143,177,.18); --glow-text:0 0 8px rgba(255,157,184,.45);
+  --glow:0 0 6px rgba(255,143,177,.24),0 0 14px rgba(255,143,177,.08); --glow-text:0 0 5px rgba(255,157,184,.22);
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -566,8 +566,8 @@ function palVars(p, dark) {
     v['--soft'] = hexA(c.accent, .16); v['--ovl'] = hexA(c.white, .94);
     v['--shadow'] = `0 0 0 1px ${hexA(c.accent, .14)},0 16px 44px -10px ${hexA(c.accent, .28)}`;
     v['--shadow-hover'] = `0 0 0 1px ${hexA(c.accent, .3)},0 16px 44px -10px ${hexA(c.accent, .45)}`;
-    v['--glow'] = `0 0 10px ${hexA(c.accent, .45)},0 0 22px ${hexA(c.accent, .18)}`;
-    v['--glow-text'] = `0 0 8px ${hexA(c.accent, .45)}`;
+    v['--glow'] = `0 0 6px ${hexA(c.accent, .24)},0 0 14px ${hexA(c.accent, .08)}`;
+    v['--glow-text'] = `0 0 5px ${hexA(c.accent, .22)}`;
   } else {
     v['--soft'] = c.soft;
     v['--shadow'] = `0 12px 30px -8px ${hexA(c.deep, .18)}`;
@@ -599,7 +599,7 @@ function cardPaletteCss(id) {
       '--accent': c.accent, '--accent-hover': c.hover, '--accent-deep': c.deep, '--accent-soft': v['--soft'], '--on-accent': c.on, '--shadow-card': v['--shadow'] };
     if (dark) {
       m['--glow'] = v['--glow']; m['--glow-text'] = v['--glow-text'];
-      m['--glow-svg'] = `drop-shadow(0 0 3px ${hexA(c.accent, .75)}) drop-shadow(0 0 8px ${hexA(c.accent, .35)})`;
+      m['--glow-svg'] = `drop-shadow(0 0 2px ${hexA(c.accent, .42)}) drop-shadow(0 0 6px ${hexA(c.accent, .16)})`;
     }
     return Object.keys(m).map(k => k + ':' + m[k]).join(';');
   };
@@ -649,7 +649,6 @@ function renderChips() {
   const many = files.length > 1;
   $('splitWrap').style.opacity = many ? '1' : '.45';
   $('splitOn').disabled = !many;
-  if (!many) $('splitOn').checked = false;
   const box = $('chips'); box.innerHTML = '';
   links.forEach((l, i) => {
     const c = document.createElement('div'); c.className = 'chip';
@@ -678,13 +677,16 @@ $('linkInput').addEventListener('keydown', e => {
 
 $('btnUpload').onclick = () => $('fileInput').click();
 async function addFiles(list) {
+  const bad = [];
   for (const f of list) {
     try {
       const got = await readFile(f);
       (Array.isArray(got) ? got : [got]).forEach(x => files.push(x));
-    } catch (err) { msg(err.message); }
+    } catch (err) { bad.push(err.message || String(err)); }
   }
   renderChips();
+  if (bad.length === 1) msg(bad[0]);
+  else if (bad.length) msg(bad.length + ' of ' + list.length + ' files were not added. ' + bad.join(' '));
 }
 $('fileInput').onchange = async e => { await addFiles([...e.target.files]); e.target.value = ''; };
 
@@ -830,7 +832,7 @@ async function start(action) {
     finally { $('btnSum').disabled = $('btnKeep').disabled = false; }
   }
   const common = { action, mode, pages, notices: $('noticeInput').value.trim(), folderId: $('folderSel').value || null, cardPal: curCardPal };
-  const split = $('splitOn').checked && usedFiles.length > 1;
+  const split = $('splitOn').checked && !$('splitOn').disabled && usedFiles.length > 1;
   const parts = split
     ? usedFiles.map(f => ({ files: [f], links: [], text: '' }))
     : [{ files: usedFiles, links: usedLinks, text: pasted }];
@@ -1063,8 +1065,8 @@ const DECK_CSS = `
   --accent:#FF9DB8;--accent-hover:#FFB3C8;--accent-deep:#FF8FAE;--accent-soft:rgba(255,157,184,.16);--on-accent:#2D2D2D;
   --ok:#8FD69A;--ok-soft:#6FB67A;--warn:#FFC15E;--danger:#FF7A85;--danger-soft:#FF909A;--info:#7FB2FF;--yellow:#FFD966;
   --shadow-card:0 0 0 1px rgba(255,157,184,.14),0 16px 44px -10px rgba(255,143,177,.28);
-  --glow:0 0 10px rgba(255,143,177,.45),0 0 22px rgba(255,143,177,.18);--glow-text:0 0 8px rgba(255,157,184,.45);
-  --glow-svg:drop-shadow(0 0 3px rgba(255,157,184,.75)) drop-shadow(0 0 8px rgba(255,143,177,.35));
+  --glow:0 0 6px rgba(255,143,177,.24),0 0 14px rgba(255,143,177,.08);--glow-text:0 0 5px rgba(255,157,184,.22);
+  --glow-svg:drop-shadow(0 0 2px rgba(255,157,184,.42)) drop-shadow(0 0 6px rgba(255,143,177,.16));
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -1097,7 +1099,7 @@ html:has(.track.v){scroll-snap-type:y proximity}
 .counter{color:var(--text-muted);font-size:12px;font-weight:600;white-space:nowrap}
 .c-title{margin:0;color:var(--text-strong);font-weight:800;font-size:1rem;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 @media(min-width:768px){.c-title{font-size:1.125rem}}
-:root[data-theme="dark"] .c-title{text-shadow:var(--glow-text)}
+:root[data-theme="dark"] .c-title{text-shadow:none}
 .card-body{flex:1;min-height:0;overflow-y:auto;padding:10px 4px 8px 0;display:flex;flex-direction:column;gap:8px;font-size:.8rem;line-height:1.35}
 @media(min-width:640px){.card-body{font-size:.85rem;line-height:1.4}}
 .custom-scrollbar::-webkit-scrollbar{width:3px}
@@ -1784,11 +1786,13 @@ function schedule(job) {
     waiting.push(job); renderAll(); return;
   }
   running++;
-  run(job).then(() => {
+  const done = err => {
     running--;
+    if (err && !job.cancelled) { job.status = 'err'; job.error = err.message || String(err); renderAll(); }
     let next;
     while ((next = waiting.shift())) { if (!next.cancelled) { schedule(next); break; } }
-  });
+  };
+  try { run(job).then(() => done(), done); } catch (e) { done(e); }
 }
 
 const stageText = j => (j.stage || 'Starting...') + (j.t0 ? ' · ' + Math.round((Date.now() - j.t0) / 1000) + 's' : '');
@@ -1934,7 +1938,7 @@ function renderFolderSel() {
 function renderGrid() {
   const g = $('grid'); ro.disconnect(); g.innerHTML = '';
   if (!curFolder) {
-    jobs.filter(j => !j.snapshot.folderId).forEach(j => g.appendChild(jobTile(j)));
+    jobs.forEach(j => g.appendChild(jobTile(j)));   // never hide work behind a folder
     folders.forEach(f => {
       const n = items.filter(i => i.folderId === f.id).length;
       const t = document.createElement('div'); t.className = 'tile folder';
