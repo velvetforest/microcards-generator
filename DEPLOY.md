@@ -52,6 +52,28 @@ npx wrangler pages deploy
 `wrangler.toml` supplies the output folder and the KV binding, so the deploy
 command needs no arguments.
 
+## Optional: picking sources from Google Drive
+
+The **From Drive** button needs a Google Cloud project. The scope it asks for
+is `drive.file`, which only ever covers the files a person picks in Google's
+own dialog, so the app sees nothing else in their Drive and Google does not put
+it through app verification.
+
+1. At `console.cloud.google.com`, create a project and enable both **Google
+   Picker API** and **Google Drive API** under APIs & Services → Library.
+2. Configure the OAuth consent screen (External), then publish it so anyone can
+   use it rather than just your test users.
+3. Credentials → Create credentials → **OAuth client ID** → Web application.
+   Add your site to **Authorized JavaScript origins**, for example
+   `https://microcards-generator.pages.dev`, with no trailing slash.
+4. Credentials → Create credentials → **API key**. Restrict it to the Picker
+   API and to your site.
+5. In the app, open Settings and paste the client ID, the API key and, from the
+   project's dashboard, the project number.
+
+The three values live in the browser, not in the repo, so each person hosting a
+copy uses their own.
+
 ## Good to know
 
 - **Workers KV lists are eventually consistent.** A record is written
