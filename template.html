@@ -82,6 +82,12 @@ kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--bo
 .composer.drag::after{content:'Drop files to add them';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:20px;background:var(--soft);color:var(--deep);font-weight:700;font-size:16px;pointer-events:none;backdrop-filter:blur(2px)}
 [hidden]{display:none !important}
 .hint.bad{color:var(--danger)}
+details.adv{margin-top:10px}
+details.adv summary{cursor:pointer;font-size:11.5px;font-weight:500;color:var(--muted);list-style:none;display:inline-flex;align-items:center;gap:5px}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv summary::before{content:'B8';font-size:9px;transition:transform .15s}
+details.adv[open] summary::before{transform:rotate(90deg)}
+details.adv summary:hover{color:var(--deep)}
 .sy-code{word-break:break-all;font-size:25px;font-weight:800;letter-spacing:.18em;text-align:center;color:var(--strong);margin:14px 0 6px}
 .sync-btn{position:relative}
 .sdot{position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:transparent}
@@ -446,6 +452,14 @@ function cardPaletteCss(id) {
   };
   return `<style id="card-palette">html:root[data-theme="light"]{${block(false)}}html:root[data-theme="dark"]{${block(true)}}</style>`;
 }
+// A deck's html is written once, so notes ride in just ahead of its runtime.
+function withNotes(html, notes, on, editable) {
+  if (!/window\.__DECK=/.test(html)) return html;
+  const payload = JSON.stringify({ map: notes || {}, on: on !== false, editable: !!editable, label: 'Notes' }).replace(/</g, '\\u003c');
+  return html.replace('<script>window.__DECK=', '<scr' + 'ipt>window.__NOTES=' + payload + ';<\/scr' + 'ipt><scr' + 'ipt>window.__DECK=');
+}
+const notesOn = () => store.get('notesOn', '1') === '1';
+
 function applyCardPalette(html, id) {
   const css = cardPaletteCss(id);
   if (!css) return html;
@@ -955,6 +969,22 @@ html:has(.track.v){scroll-snap-type:y proximity}
 .card-body code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em}
 .card-body :not(pre)>code{background:var(--surface);padding:0 4px;border-radius:3px}
 .katex-display{overflow-x:auto;overflow-y:hidden;margin:.45em 0}
+.note-wrap{margin-top:10px;padding-top:9px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:7px}
+.note-wrap.drop{outline:2px dashed var(--accent);outline-offset:3px;border-radius:6px}
+.note-open{display:none;align-self:flex-start;border:0;background:none;padding:0;font:inherit;font-size:11.5px;font-weight:600;color:var(--text-muted);cursor:pointer}
+.note-open:hover{color:var(--accent-deep)}
+.note-wrap.empty .note-open{display:block}
+.note-wrap.empty .note-in,.note-wrap.empty .note-pics{display:none}
+.note-in{width:100%;min-height:42px;resize:none;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);padding:7px 9px;font:inherit;font-size:12.5px;line-height:1.45}
+.note-in:focus{outline:2px solid var(--accent);outline-offset:0}
+.note-ro{margin:0;font-size:12.5px;line-height:1.45;color:var(--text);white-space:pre-wrap}
+.note-pics{display:flex;flex-wrap:wrap;gap:6px}
+.note-pics:empty{display:none}
+.note-pic{position:relative;display:block;line-height:0}
+.note-pic img{max-height:72px;max-width:120px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:zoom-in;object-fit:cover}
+.note-pic.big img{max-height:none;max-width:100%;cursor:zoom-out;object-fit:contain}
+.note-x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;background:var(--text-strong);color:var(--card-bg);font-size:12px;line-height:1;cursor:pointer;padding:0}
+:root.notes-off .note-wrap{display:none}
 .hl{background:var(--accent-soft);color:var(--accent-deep);font-weight:700;padding:0 3px;border-radius:3px}
 :root[data-theme="dark"] .hl{text-shadow:var(--glow-text)}
 html.fit{--card-w:min(94vw,860px);--card-h:calc(100vh - 104px)}
@@ -1121,6 +1151,7 @@ function deckRuntime() {
     `<div class="dots" id="dots">${cards.map((_, i) => `<button data-i="${i}" aria-label="${i + 1}"></button>`).join('')}</div>` +
     `<button class="tb pri" id="bNext"><span class="tx">${esc(UI.next)}</span><i class="fa-solid fa-chevron-right"></i></button>` +
     `<button class="tb sec" id="bLay"></button>` +
+    (window.__NOTES ? `<button class="tb sec" id="bNotes"></button>` : '') +
     `<button class="tb sec" id="bFull" title="${esc(UI.fullscreen)} (F)"><i class="fa-solid fa-expand"></i><span class="tx">${esc(UI.fullscreen)}</span><kbd>F</kbd></button>`;
   const dots = [...bar.querySelectorAll('#dots button')];
   const mark = i => { cur = i; dots.forEach((d, k) => d.classList.toggle('on', k === i)); };
@@ -1166,6 +1197,112 @@ function deckRuntime() {
   };
   addEventListener('resize', fitUpdate); document.addEventListener('fullscreenchange', fitUpdate); document.addEventListener('webkitfullscreenchange', fitUpdate);
   fitUpdate();
+  // ---- notes: the reader's own words (and pictures) under each card
+  const NOTES = window.__NOTES || { map: {}, on: true, editable: false };
+  const noteOf = i => NOTES.map[i] || { t: '', p: [] };
+  const hasNote = n => !!(n.t && n.t.trim()) || !!(n.p && n.p.length);
+  const post = m => { try { parent.postMessage(m, '*'); } catch (e) {} };
+  let notesOn = NOTES.on !== false;
+
+  async function shrink(file) {
+    const url = URL.createObjectURL(file), img = new Image();
+    try {
+      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('bad image')); img.src = url; });
+      const sc = Math.min(1, 1400 / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(img.width * sc)); cv.height = Math.max(1, Math.round(img.height * sc));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      let out = cv.toDataURL('image/png');
+      if (out.length > 700000) out = cv.toDataURL('image/jpeg', 0.85);
+      return out;
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  function drawPics(box, n, i) {
+    box.innerHTML = '';
+    (n.p || []).forEach((src, k) => {
+      const fig = document.createElement('span'); fig.className = 'note-pic';
+      const im = document.createElement('img'); im.src = src; im.alt = 'note picture ' + (k + 1);
+      im.onclick = () => { if (!im.parentElement.classList.contains('big')) im.parentElement.classList.add('big'); else im.parentElement.classList.remove('big'); };
+      fig.appendChild(im);
+      if (NOTES.editable) {
+        const x = document.createElement('button'); x.className = 'note-x'; x.type = 'button'; x.title = 'Remove this picture'; x.textContent = '×';
+        x.onclick = ev => { ev.stopPropagation(); n.p.splice(k, 1); drawPics(box, n, i); save(i, n); };
+        fig.appendChild(x);
+      }
+      box.appendChild(fig);
+    });
+  }
+
+  let saveTimer = null, pending = {};
+  function save(i, n) {
+    NOTES.map[i] = n;
+    pending[i] = { t: n.t || '', p: n.p || [] };
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { const out = pending; pending = {}; post({ mc: 'notes', notes: out }); }, 500);
+  }
+
+  function buildNote(card, i) {
+    const n = noteOf(i);
+    const wrap = document.createElement('div');
+    wrap.className = 'note-wrap' + (hasNote(n) ? '' : ' empty');
+    const pics = document.createElement('div'); pics.className = 'note-pics';
+
+    if (!NOTES.editable) {
+      if (!hasNote(n)) return;
+      const p = document.createElement('p'); p.className = 'note-ro'; p.textContent = n.t || '';
+      wrap.append(p, pics); drawPics(pics, n, i);
+      card.querySelector('.card-body').appendChild(wrap);
+      return;
+    }
+
+    const open = document.createElement('button');
+    open.type = 'button'; open.className = 'note-open'; open.textContent = '+ ' + (NOTES.label || 'Note');
+    open.onclick = () => { wrap.classList.remove('empty'); ta.focus(); };
+
+    const ta = document.createElement('textarea');
+    ta.className = 'note-in'; ta.rows = 2; ta.value = n.t || '';
+    ta.placeholder = (NOTES.label || 'Note') + '… you can paste a picture here';
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 220) + 'px'; };
+    ta.addEventListener('input', () => { grow(); n.t = ta.value; save(i, n); });
+    ta.addEventListener('blur', () => { if (!hasNote(n)) wrap.classList.add('empty'); });
+
+    const addPics = async list => {
+      for (const f of list) {
+        if (!/^image\//.test(f.type)) continue;
+        if ((n.p || []).length >= 6) break;
+        try { (n.p = n.p || []).push(await shrink(f)); } catch (e) {}
+      }
+      drawPics(pics, n, i); save(i, n);
+    };
+    ta.addEventListener('paste', e => {
+      const imgs = [...(e.clipboardData ? e.clipboardData.files : [])].filter(f => /^image\//.test(f.type));
+      if (!imgs.length) return;
+      e.preventDefault(); addPics(imgs);
+    });
+    wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('drop'); });
+    wrap.addEventListener('dragleave', () => wrap.classList.remove('drop'));
+    wrap.addEventListener('drop', e => {
+      e.preventDefault(); wrap.classList.remove('drop');
+      addPics([...(e.dataTransfer ? e.dataTransfer.files : [])]);
+    });
+
+    wrap.append(open, ta, pics);
+    drawPics(pics, n, i);
+    card.querySelector('.card-body').appendChild(wrap);
+    if (!wrap.classList.contains('empty')) grow();
+  }
+
+  [...track.children].forEach((card, i) => buildNote(card, i));
+  const applyNotes = () => {
+    document.documentElement.classList.toggle('notes-off', !notesOn);
+    const btn = document.getElementById('bNotes');
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-' + (notesOn ? 'eye' : 'eye-slash') + '"></i><span class="tx">' + esc(NOTES.label || 'Notes') + '</span>';
+  };
+  const bNotes = document.getElementById('bNotes');
+  if (bNotes) bNotes.onclick = () => { notesOn = !notesOn; applyNotes(); post({ mc: 'notesOn', on: notesOn }); };
+  applyNotes();
+
   layBtn(); observe(); mark(0);
   const math = () => {
     if (!window.renderMathInElement) return;
@@ -1658,13 +1795,33 @@ function openItem(id) {
   const it = items.find(i => i.id === id); if (!it) return;
   openId = id;
   $('vTitle').textContent = it.title;
-  $('vFrame').srcdoc = it.html;
+  $('vFrame').srcdoc = withNotes(it.html, it.notes, notesOn(), true);
   const m = $('vMove'); m.innerHTML = '';
   folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = 'Folder: ' + f.name; m.appendChild(o); });
   m.value = it.folderId;
   $('viewer').showModal();
   if (store.get('fs', '0') === '1') enterViewerFull();
 }
+addEventListener('message', async e => {
+  if (!openId || !$('viewer').open || e.source !== $('vFrame').contentWindow) return;
+  const m = e.data;
+  if (!m || typeof m !== 'object') return;
+  if (m.mc === 'notesOn') { store.set('notesOn', m.on ? '1' : '0'); return; }
+  if (m.mc !== 'notes' || !m.notes || typeof m.notes !== 'object') return;
+  const it = items.find(x => x.id === openId); if (!it) return;
+  const notes = Object.assign({}, it.notes);
+  for (const k of Object.keys(m.notes)) {
+    if (!/^\d{1,4}$/.test(k)) continue;
+    const n = m.notes[k];
+    if (!n || typeof n !== 'object') continue;
+    const t = typeof n.t === 'string' ? n.t.slice(0, 4000) : '';
+    const pics = Array.isArray(n.p) ? n.p.filter(x => typeof x === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(x) && x.length < 3e6).slice(0, 6) : [];
+    if (t.trim() || pics.length) notes[k] = { t, p: pics }; else delete notes[k];
+  }
+  it.notes = notes; it.updated = Date.now();
+  await dbPut('items', it); syncSoon();
+});
+
 $('vMove').onchange = async e => {
   const it = items.find(i => i.id === openId); if (!it) return;
   it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll(); syncSoon();
@@ -1704,7 +1861,7 @@ $('vDelete').onclick = () => openId && removeItem(openId);
 $('vDownload').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([it.html], { type: 'text/html' }));
+  a.href = URL.createObjectURL(new Blob([withNotes(it.html, it.notes, true, false)], { type: 'text/html' }));
   a.download = it.title.replace(/[\\/:*?"<>|]+/g, '').trim().replace(/\s+/g, '-') + '.html';
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
