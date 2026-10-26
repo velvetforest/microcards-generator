@@ -337,6 +337,7 @@ QUY TẮC VẬN HÀNH (ưu tiên cao nhất):
 - KHÔNG BAO GIỜ dịch. Toàn bộ chữ (kể cả @@TITLE, @@UI và nhãn) phải ở đúng ngôn ngữ của văn bản nguồn (nguồn tiếng Anh thì ra tiếng Anh). Hướng dẫn này viết bằng tiếng Việt không có nghĩa là kết quả phải tiếng Việt.
 - Tuân thủ đúng ACTION ở đầu tin nhắn người dùng.
 - SƠ ĐỒ KHỐI/LƯU ĐỒ (node và mũi tên): KHÔNG vẽ tay SVG. Dùng data-graph-ref: nếu tôi cung cấp sơ đồ Dn thì chỉ đặt <div data-graph-ref="Dn"></div> trong .illus-fill; nếu sơ đồ nằm trong ảnh/PDF thì liệt kê ĐẦY ĐỦ mọi node và mọi cạnh trong khối @@GRAPH rồi tham chiếu bằng data-graph-ref.
+- CẮT ẢNH (fig/data-box) CHỈ DÙNG CHO HÌNH, KHÔNG DÙNG CHO CHỮ. Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Đoạn văn, danh sách, đề bài, ví dụ, bảng, công thức, code đều phải gõ lại thành chữ thật (bảng dùng <table>, công thức dùng LaTeX, code dùng <pre><code>). Mỗi card phải có chữ do bạn viết; card chỉ gồm một ảnh cắt là không hợp lệ.
 - HÌNH MINH HOẠ CỦA NGUỒN (sơ đồ, biểu đồ, bảng, cây thư mục, mermaid/ASCII): KHÔNG BAO GIỜ bỏ, cắt bớt, rút gọn hay đơn giản hoá, kể cả khi ACTION là tom-tat (tóm tắt chỉ áp dụng cho văn bản). Vẽ lại giống hệt: đủ mọi ô, mọi mũi tên, đúng bố cục và đúng từng nhãn. Hình lớn thì đặt vào card riêng, không thu nhỏ chữ dưới 8px.
 - ACTION giu-nguyen = SAO CHÉP Y HỆT, không phải tóm tắt: chép nguyên văn từng câu, từng mục, từng công thức (LaTeX, giữ số hiệu), từng bảng, từng chú thích hình của phần được cung cấp; không bỏ, không gộp, không viết lại, không dừng giữa chừng. Dùng thêm nhiều card nếu cần.
 - Hình trong tệp PDF/ảnh đính kèm: dùng <div class="fig" data-src data-page data-box> để ứng dụng cắt đúng hình gốc từ tệp (giống hệt), theo hướng dẫn mục 5; ưu tiên cách này hơn vẽ lại.`;
@@ -1689,6 +1690,12 @@ async function run(job) {
         html = extractHtml(text);
         if (truncated && !/<\/html>/i.test(html)) throw new Error('The result was cut off because it was too long. Try splitting the sources.');
         all = html;
+      }
+      const cropped = deck ? deck.cards.filter(c => /data-src\s*=/.test(c.body) && c.body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length < 140).length : 0;
+      if (cropped > Math.max(1, Math.ceil((deck ? deck.cards.length : 0) * 0.25))) {
+        warn = cropped + ' cards were only pictures of the page';
+        note = 'LẦN TRƯỚC BẠN ĐÃ CẮT ẢNH CỦA VĂN BẢN thay vì viết nội dung: ' + cropped + ' card chỉ có một ảnh cắt từ trang tài liệu. Hãy tạo lại toàn bộ bộ card và GÕ LẠI THÀNH CHỮ mọi đoạn văn, đề bài, ví dụ, bảng, công thức, code. Chỉ dùng fig/data-box cho hình vẽ, biểu đồ, ảnh chụp thật sự, và mỗi card phải có chữ do bạn viết.';
+        continue;
       }
       const miss = missingGraphs(all, dgs);
       if (!miss.length) break;

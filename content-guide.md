@@ -126,7 +126,10 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
     Rồi dùng `<div class="illus-fill"><div data-graph-ref="G1"></div></div>` trong card hình. `dir` là `TD` (trên xuống), `LR` (trái sang phải), `BT` hoặc `RL`. Mỗi nhãn chép nguyên văn từ nguồn. Đếm lại số node và số mũi tên của hình gốc và đối chiếu với JSON trước khi trả kết quả.
   - Mỗi sơ đồ khối nằm trong card hình riêng (card chỉ có `illus-fill` kèm tối đa một dòng chú thích ngắn, không cần danh sách), đặt ngay sau card có văn bản nói về hình đó.
 - Biểu đồ số liệu, bảng, sơ đồ không phải dạng node-mũi tên: vẽ lại **giống hệt** bằng SVG hoặc bảng HTML. Giữ đủ số hàng, số cột, số liệu, chú giải, trục và đơn vị. Hình quá lớn thì dành card riêng (`illus-fill`) hoặc chia nhiều card liên tiếp, có ghi "tiếp tục ở card sau", không thu nhỏ chữ dưới 8px và không cắt bớt.
-- **Hình lấy từ tệp đính kèm (PDF hoặc ảnh): ƯU TIÊN cắt đúng hình gốc**, vì giống hệt tuyệt đối. Áp dụng cho mọi hình, biểu đồ, ảnh chụp, sơ đồ kiến trúc trong nguồn khi có tệp đính kèm:
+- **CẮT ẢNH CHỈ DÙNG CHO HÌNH, TUYỆT ĐỐI KHÔNG DÙNG CHO CHỮ.** Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Mọi câu chữ, đoạn văn, danh sách, bảng, công thức, đoạn code, đề bài, ví dụ đều phải **gõ lại thành chữ thật** trong card (bảng dùng `<table>`, công thức dùng LaTeX, code dùng `<pre><code>`), kể cả khi chúng nằm cùng trang với hình. Người đọc phải chọn và tìm kiếm được chữ trên card; một tấm ảnh chụp đoạn văn là không đạt.
+- `fig` chỉ dành cho thứ **không phải chữ**: sơ đồ, biểu đồ, đồ thị, ảnh chụp, hình vẽ, ảnh giao diện. Nếu vùng bạn định cắt chủ yếu là các dòng chữ thì đó không phải hình, hãy chép ra chữ.
+- **Mỗi card phải có nội dung chữ do bạn viết.** Card chỉ gồm một ảnh cắt là không hợp lệ, trừ card hình riêng cho một hình lớn thật sự, và card đó vẫn phải có dòng chú thích `<p class="cap">` bằng chữ.
+- **Hình lấy từ tệp đính kèm (PDF hoặc ảnh): ƯU TIÊN cắt đúng hình gốc**, vì giống hệt tuyệt đối. Áp dụng cho hình vẽ, biểu đồ, ảnh chụp, sơ đồ kiến trúc trong nguồn khi có tệp đính kèm:
 
 ```
 <div class="illus-fill"><div class="fig" data-src="1" data-page="3" data-box="120,80,540,920"></div></div>
@@ -150,4 +153,5 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 - [ ] Không dịch: mọi chữ đúng ngôn ngữ nguồn, `@@UI` đúng ngôn ngữ nguồn.
 - [ ] Số liệu và khẳng định đều bám nguồn.
 - [ ] Với giu-nguyen: không câu nào, công thức nào, bảng nào, hình nào bị bỏ hay viết lại; công thức chép bằng LaTeX đúng số hiệu.
+- [ ] Không card nào chỉ là ảnh cắt từ trang tài liệu; không đoạn văn, bảng, công thức hay code nào bị thay bằng ảnh.
 - [ ] Mọi sơ đồ, biểu đồ, bảng có trong nguồn đều có mặt, đủ node, mũi tên và nhãn.

@@ -444,7 +444,10 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
     Rồi dùng `<div class="illus-fill"><div data-graph-ref="G1"></div></div>` trong card hình. `dir` là `TD` (trên xuống), `LR` (trái sang phải), `BT` hoặc `RL`. Mỗi nhãn chép nguyên văn từ nguồn. Đếm lại số node và số mũi tên của hình gốc và đối chiếu với JSON trước khi trả kết quả.
   - Mỗi sơ đồ khối nằm trong card hình riêng (card chỉ có `illus-fill` kèm tối đa một dòng chú thích ngắn, không cần danh sách), đặt ngay sau card có văn bản nói về hình đó.
 - Biểu đồ số liệu, bảng, sơ đồ không phải dạng node-mũi tên: vẽ lại **giống hệt** bằng SVG hoặc bảng HTML. Giữ đủ số hàng, số cột, số liệu, chú giải, trục và đơn vị. Hình quá lớn thì dành card riêng (`illus-fill`) hoặc chia nhiều card liên tiếp, có ghi "tiếp tục ở card sau", không thu nhỏ chữ dưới 8px và không cắt bớt.
-- **Hình lấy từ tệp đính kèm (PDF hoặc ảnh): ƯU TIÊN cắt đúng hình gốc**, vì giống hệt tuyệt đối. Áp dụng cho mọi hình, biểu đồ, ảnh chụp, sơ đồ kiến trúc trong nguồn khi có tệp đính kèm:
+- **CẮT ẢNH CHỈ DÙNG CHO HÌNH, TUYỆT ĐỐI KHÔNG DÙNG CHO CHỮ.** Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Mọi câu chữ, đoạn văn, danh sách, bảng, công thức, đoạn code, đề bài, ví dụ đều phải **gõ lại thành chữ thật** trong card (bảng dùng `<table>`, công thức dùng LaTeX, code dùng `<pre><code>`), kể cả khi chúng nằm cùng trang với hình. Người đọc phải chọn và tìm kiếm được chữ trên card; một tấm ảnh chụp đoạn văn là không đạt.
+- `fig` chỉ dành cho thứ **không phải chữ**: sơ đồ, biểu đồ, đồ thị, ảnh chụp, hình vẽ, ảnh giao diện. Nếu vùng bạn định cắt chủ yếu là các dòng chữ thì đó không phải hình, hãy chép ra chữ.
+- **Mỗi card phải có nội dung chữ do bạn viết.** Card chỉ gồm một ảnh cắt là không hợp lệ, trừ card hình riêng cho một hình lớn thật sự, và card đó vẫn phải có dòng chú thích `<p class="cap">` bằng chữ.
+- **Hình lấy từ tệp đính kèm (PDF hoặc ảnh): ƯU TIÊN cắt đúng hình gốc**, vì giống hệt tuyệt đối. Áp dụng cho hình vẽ, biểu đồ, ảnh chụp, sơ đồ kiến trúc trong nguồn khi có tệp đính kèm:
 
 ```
 <div class="illus-fill"><div class="fig" data-src="1" data-page="3" data-box="120,80,540,920"></div></div>
@@ -468,6 +471,7 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 - [ ] Không dịch: mọi chữ đúng ngôn ngữ nguồn, `@@UI` đúng ngôn ngữ nguồn.
 - [ ] Số liệu và khẳng định đều bám nguồn.
 - [ ] Với giu-nguyen: không câu nào, công thức nào, bảng nào, hình nào bị bỏ hay viết lại; công thức chép bằng LaTeX đúng số hiệu.
+- [ ] Không card nào chỉ là ảnh cắt từ trang tài liệu; không đoạn văn, bảng, công thức hay code nào bị thay bằng ảnh.
 - [ ] Mọi sơ đồ, biểu đồ, bảng có trong nguồn đều có mặt, đủ node, mũi tên và nhãn.
 </script>
 
@@ -489,6 +493,7 @@ QUY TẮC VẬN HÀNH (ưu tiên cao nhất):
 - KHÔNG BAO GIỜ dịch. Toàn bộ chữ (kể cả @@TITLE, @@UI và nhãn) phải ở đúng ngôn ngữ của văn bản nguồn (nguồn tiếng Anh thì ra tiếng Anh). Hướng dẫn này viết bằng tiếng Việt không có nghĩa là kết quả phải tiếng Việt.
 - Tuân thủ đúng ACTION ở đầu tin nhắn người dùng.
 - SƠ ĐỒ KHỐI/LƯU ĐỒ (node và mũi tên): KHÔNG vẽ tay SVG. Dùng data-graph-ref: nếu tôi cung cấp sơ đồ Dn thì chỉ đặt <div data-graph-ref="Dn"></div> trong .illus-fill; nếu sơ đồ nằm trong ảnh/PDF thì liệt kê ĐẦY ĐỦ mọi node và mọi cạnh trong khối @@GRAPH rồi tham chiếu bằng data-graph-ref.
+- CẮT ẢNH (fig/data-box) CHỈ DÙNG CHO HÌNH, KHÔNG DÙNG CHO CHỮ. Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Đoạn văn, danh sách, đề bài, ví dụ, bảng, công thức, code đều phải gõ lại thành chữ thật (bảng dùng <table>, công thức dùng LaTeX, code dùng <pre><code>). Mỗi card phải có chữ do bạn viết; card chỉ gồm một ảnh cắt là không hợp lệ.
 - HÌNH MINH HOẠ CỦA NGUỒN (sơ đồ, biểu đồ, bảng, cây thư mục, mermaid/ASCII): KHÔNG BAO GIỜ bỏ, cắt bớt, rút gọn hay đơn giản hoá, kể cả khi ACTION là tom-tat (tóm tắt chỉ áp dụng cho văn bản). Vẽ lại giống hệt: đủ mọi ô, mọi mũi tên, đúng bố cục và đúng từng nhãn. Hình lớn thì đặt vào card riêng, không thu nhỏ chữ dưới 8px.
 - ACTION giu-nguyen = SAO CHÉP Y HỆT, không phải tóm tắt: chép nguyên văn từng câu, từng mục, từng công thức (LaTeX, giữ số hiệu), từng bảng, từng chú thích hình của phần được cung cấp; không bỏ, không gộp, không viết lại, không dừng giữa chừng. Dùng thêm nhiều card nếu cần.
 - Hình trong tệp PDF/ảnh đính kèm: dùng <div class="fig" data-src data-page data-box> để ứng dụng cắt đúng hình gốc từ tệp (giống hệt), theo hướng dẫn mục 5; ưu tiên cách này hơn vẽ lại.`;
@@ -1841,6 +1846,12 @@ async function run(job) {
         html = extractHtml(text);
         if (truncated && !/<\/html>/i.test(html)) throw new Error('The result was cut off because it was too long. Try splitting the sources.');
         all = html;
+      }
+      const cropped = deck ? deck.cards.filter(c => /data-src\s*=/.test(c.body) && c.body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length < 140).length : 0;
+      if (cropped > Math.max(1, Math.ceil((deck ? deck.cards.length : 0) * 0.25))) {
+        warn = cropped + ' cards were only pictures of the page';
+        note = 'LẦN TRƯỚC BẠN ĐÃ CẮT ẢNH CỦA VĂN BẢN thay vì viết nội dung: ' + cropped + ' card chỉ có một ảnh cắt từ trang tài liệu. Hãy tạo lại toàn bộ bộ card và GÕ LẠI THÀNH CHỮ mọi đoạn văn, đề bài, ví dụ, bảng, công thức, code. Chỉ dùng fig/data-box cho hình vẽ, biểu đồ, ảnh chụp thật sự, và mỗi card phải có chữ do bạn viết.';
+        continue;
       }
       const miss = missingGraphs(all, dgs);
       if (!miss.length) break;
