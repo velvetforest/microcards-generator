@@ -262,17 +262,26 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <h3>Sync devices</h3>
   <div class="hint" style="margin:0 0 14px">Your library is encrypted on this device and the encrypted blocks are kept in a vault on this site. Use the same sync code on another device to get the same library there.</div>
   <div id="syOff" hidden>
-    <div class="row">
-      <button class="btn primary" id="syNew">Turn on sync</button>
-    </div>
-    <label style="margin-top:16px">Already have a sync code?</label>
-    <div class="row"><input class="field" id="syIn" placeholder="ABCDE-FGHJK-LMNPQ-RSTUV" autocomplete="off" spellcheck="false" style="flex:1;min-width:200px;letter-spacing:.06em"><button class="btn" id="syUse">Use this code</button></div>
+    <div class="row"><button class="btn primary" id="syNew">Turn on sync</button></div>
+    <label style="margin-top:18px">Already syncing on another device?</label>
+    <div class="hint" style="margin:0 0 8px">Open Sync devices there, press Pair another device, and type its six digits here.</div>
+    <div class="row"><input class="field" id="syPin" inputmode="numeric" maxlength="7" placeholder="123 456" autocomplete="off" style="width:140px;font-size:19px;letter-spacing:.14em"><button class="btn" id="syPinGo">Pair</button></div>
+    <details class="adv"><summary>Use a recovery key instead</summary>
+      <div class="row" style="margin-top:8px"><input class="field" id="syIn" placeholder="ABCDE-FGHJK-LMNPQ-RSTUV" autocomplete="off" spellcheck="false" style="flex:1;min-width:190px;letter-spacing:.06em"><button class="btn" id="syUse">Use key</button></div>
+    </details>
   </div>
   <div id="syOn" hidden>
-    <div class="hint" style="margin:0">Your sync code. Enter it on your other device to get the same library. Anyone with it can read your library, so keep it private.</div>
-    <div class="sy-code" id="syCode"></div>
-    <div class="row" style="justify-content:center"><button class="btn" id="syCopy">Copy code</button></div>
-    <div class="row" style="margin-top:14px"><button class="btn primary" id="syGo">Sync now</button><span class="spacer"></span><button class="btn" id="syOut">Stop syncing here</button></div>
+    <div class="row"><button class="btn primary" id="syGo">Sync now</button><button class="btn" id="syPair">Pair another device</button><span class="spacer"></span><button class="btn" id="syOut">Stop syncing here</button></div>
+    <div id="syPinBox" hidden>
+      <div class="hint" style="margin:14px 0 0">Type these six digits on the other device. They work once.</div>
+      <div class="sy-code" id="syPinShow"></div>
+      <div class="hint" id="syPinLeft" style="text-align:center"></div>
+    </div>
+    <details class="adv" style="margin-top:16px"><summary>Recovery key</summary>
+      <div class="hint" style="margin:8px 0 0">The real key to your vault. A device can join with it at any time, so keep it private; lose it with every synced device gone and the vault cannot be opened again.</div>
+      <div class="sy-code" id="syCode" style="font-size:19px"></div>
+      <div class="row" style="justify-content:center"><button class="btn" id="syCopy">Copy key</button></div>
+    </details>
   </div>
   <div id="syStatus" class="hint" style="margin-top:12px"></div>
   <div class="row" style="margin-top:16px"><span class="spacer"></span><button class="btn" id="syClose">Close</button></div>
@@ -1829,6 +1838,69 @@ async function syncNow(quiet) {
 
 function syncSoon() { if (!synced()) return; clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(true), 4000); }
 
+// ---- Pairing code: six digits that only carry the real key, briefly.
+// The key itself stays long; the short code opens a one-shot, 10-minute
+// envelope holding it, so guessing it is only worth anything in that window.
+const PIN_TTL = 10 * 60 * 1000;
+let pinTimer = null, pinUntil = 0;
+
+const newPin = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+const normPin = v => String(v || '').replace(/\D/g, '');
+
+async function pinBits(pin, salt) {
+  const base = await crypto.subtle.importKey('raw', enc8.encode(pin), 'PBKDF2', false, ['deriveBits', 'deriveKey']);
+  return { base, params: { name: 'PBKDF2', salt: enc8.encode(salt), iterations: 150000, hash: 'SHA-256' } };
+}
+async function pinVault(pin) {
+  const { base, params } = await pinBits(pin, 'microcards-invite-id|v1');
+  const bits = await crypto.subtle.deriveBits(params, base, 256);
+  return b64(bits).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function pinKey(pin) {
+  const { base, params } = await pinBits(pin, 'microcards-invite-key|v1');
+  return crypto.subtle.deriveKey(params, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+function pinTick() {
+  const left = pinUntil - Date.now();
+  if (left <= 0) { clearInterval(pinTimer); pinTimer = null; $('syPinBox').hidden = true; return; }
+  const m = Math.floor(left / 60000), sec = Math.floor((left % 60000) / 1000);
+  $('syPinLeft').textContent = 'Expires in ' + m + ':' + String(sec).padStart(2, '0') + '.';
+}
+
+async function makePin() {
+  if (!synced()) return;
+  $('syPair').disabled = true; syncErr = ''; renderSync();
+  try {
+    const pin = newPin(), until = Date.now() + PIN_TTL;
+    const enc = await encJson(await pinKey(pin), { code: syncCode, exp: until });
+    await api('/' + (await pinVault(pin)) + '/invite', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updatedAt: Date.now(), enc }) });
+    $('syPinShow').textContent = pin.slice(0, 3) + ' ' + pin.slice(3);
+    $('syPinBox').hidden = false;
+    pinUntil = until; clearInterval(pinTimer); pinTimer = setInterval(pinTick, 1000); pinTick();
+  } catch (e) { syncErr = e.message || String(e); }
+  $('syPair').disabled = false; renderSync();
+}
+
+async function usePin(raw) {
+  const pin = normPin(raw);
+  if (pin.length !== 6) { syncErr = 'The pairing code is six digits.'; renderSync(); return; }
+  syncErr = ''; syncStage = 'Looking for the other device...'; syncing = true; renderSync();
+  let invite = null, vid = '';
+  try {
+    vid = await pinVault(pin);
+    const got = await api('/' + vid + '/invite');
+    invite = await decJson(await pinKey(pin), got.enc);
+  } catch (e) {
+    syncErr = /No such record/i.test(e.message || '') ? 'No device is offering that code. Check the digits, or make a new code on the other device.' : (e.message || String(e));
+  }
+  syncing = false; syncStage = '';
+  if (!invite) { renderSync(); return; }
+  if (!invite.exp || invite.exp < Date.now()) { syncErr = 'That code has expired. Make a new one on the other device.'; renderSync(); return; }
+  api('/' + vid + '/invite', { method: 'DELETE' }).catch(() => {});   // one shot
+  await useCode(invite.code);
+}
+
 // ---- sync dialog
 function renderSync() {
   const on = synced();
@@ -1851,7 +1923,14 @@ async function useCode(code) {
   await syncNow();
 }
 
-$('btnSync').onclick = () => { syncErr = ''; $('syIn').value = ''; renderSync(); $('syncDlg').showModal(); };
+$('btnSync').onclick = () => {
+  syncErr = ''; $('syIn').value = ''; $('syPin').value = '';
+  if (!pinTimer) $('syPinBox').hidden = true;
+  renderSync(); $('syncDlg').showModal();
+};
+$('syPair').onclick = makePin;
+$('syPinGo').onclick = () => usePin($('syPin').value);
+$('syPin').addEventListener('keydown', e => { if (e.key === 'Enter') usePin($('syPin').value); });
 $('syClose').onclick = () => $('syncDlg').close();
 $('syNew').onclick = () => useCode(newSyncCode());
 $('syUse').onclick = () => useCode($('syIn').value);
@@ -1864,6 +1943,7 @@ $('syCopy').onclick = async () => {
 $('syOut').onclick = () => {
   if (!confirm('Stop syncing on this device? Your library stays here, and the encrypted copy stays in the vault.')) return;
   syncCode = ''; syncKey = null; vaultId = ''; store.set('synccode', ''); store.set('synclast', '0');
+  clearInterval(pinTimer); pinTimer = null; $('syPinBox').hidden = true;
   syncErr = ''; renderSync(); toast('This device no longer syncs.');
 };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncSoon(); });
@@ -1920,7 +2000,8 @@ function renderSecBody() {
 
   const sync = specGroup(host, 'When sync is on', [
     'What leaves this device is encrypted first, with AES-GCM 256.',
-    ['How the key is made', 'Your sync code runs through 150,000 PBKDF2 rounds in this browser to become the key. The code itself is never sent anywhere.'],
+    ['How the key is made', 'Your recovery key runs through 150,000 PBKDF2 rounds in this browser to become the encryption key. The recovery key itself is never sent anywhere.'],
+    ['Pairing a device', 'The six digits are not the key. They open a one-shot envelope holding it, which the other device deletes on arrival and which expires after ten minutes.'],
     ['Encryption tool', 'The one built into the browser (WebCrypto).'],
     ['What the server keeps', 'A hash of your sync code as the vault name, the time each record changed, and the encrypted blocks.'],
     ['What the server cannot read', 'Card text, titles, folder names, figures, and the deck HTML. Your Gemini API key is never part of a sync at all.']
@@ -1945,8 +2026,8 @@ function renderSecBody() {
 
   const warn = document.createElement('p'); warn.className = 'note'; warn.style.marginTop = '15px';
   warn.textContent = on
-    ? 'If you lose your sync code, nobody can recover the copy in the vault, not even the people running the server.'
-    : 'Once you turn sync on you get a sync code. It is the only key to that copy, so keep it somewhere safe.';
+    ? 'If you lose your recovery key and every synced device, nobody can open the copy in the vault, not even the people running the server.'
+    : 'Turning sync on creates a recovery key. It is the only key to that copy, so keep it somewhere safe.';
   host.appendChild(warn);
 }
 
