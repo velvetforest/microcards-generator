@@ -188,9 +188,8 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <section class="composer" id="composer">
     <div class="row">
       <button class="btn" id="btnUpload">Upload files</button>
-      <button class="btn" id="btnDrive">From Drive</button>
-      <input type="file" id="fileInput" multiple hidden accept=".pdf,.txt,.md,.csv,.html,.json,image/*,audio/*">
-      <span class="hint" style="margin:0">PDF, images, audio, txt, md, csv, html, json. You can drop here, too.</span>
+      <input type="file" id="fileInput" multiple hidden accept=".pdf,.docx,.txt,.md,.csv,.html,.json,image/*,audio/*">
+      <span class="hint" style="margin:0">PDF, Word, images, audio, txt, md, csv, html, json. You can drop here, too.</span>
     </div>
     <textarea id="textInput" placeholder="Paste text directly here (optional)..." spellcheck="false"></textarea>
     <div class="linkbar">
@@ -241,11 +240,6 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <label>Content rules (sent with every generation)</label>
   <textarea id="setGuide" spellcheck="false"></textarea>
   <div class="hint">Card layout, colors and navigation are built into the app. These rules control only the content.</div>
-  <label>Google Drive (optional, to pick sources straight from Drive)</label>
-  <div class="hint" style="margin:0 0 8px">From a Google Cloud project with the Picker API and Drive API turned on. The app asks only for the files you pick.</div>
-  <input class="field" id="setGdId" placeholder="OAuth client ID" autocomplete="off" spellcheck="false">
-  <input class="field" id="setGdKey" placeholder="Picker API key" autocomplete="off" spellcheck="false" style="margin-top:8px">
-  <input class="field" id="setGdApp" placeholder="Project number (optional)" autocomplete="off" spellcheck="false" style="margin-top:8px">
   <label class="chk" style="margin-top:14px"><input type="checkbox" id="setFs"><span>Open cards in fullscreen by default</span></label>
   <label>Backup</label>
   <div class="row">
@@ -665,7 +659,10 @@ $('linkInput').addEventListener('keydown', e => {
 $('btnUpload').onclick = () => $('fileInput').click();
 async function addFiles(list) {
   for (const f of list) {
-    try { files.push(await readFile(f)); } catch (err) { msg(err.message); }
+    try {
+      const got = await readFile(f);
+      (Array.isArray(got) ? got : [got]).forEach(x => files.push(x));
+    } catch (err) { msg(err.message); }
   }
   renderChips();
 }
@@ -685,7 +682,46 @@ window.addEventListener('drop', e => {
 });
 
 const TEXT_EXT = /\.(txt|md|csv|html?|json)$/i;
+const DOCX = /\.docx$/i;
+
+// Word files come in as HTML so headings, lists and tables survive, with the
+// pictures pulled out beside it so they can be placed on cards like any image.
+let mammothP = null;
+const loadMammoth = () => window.mammoth ? Promise.resolve(window.mammoth) : (mammothP || (mammothP = new Promise((res, rej) => {
+  const sc = document.createElement('script');
+  sc.src = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js';
+  sc.onload = () => res(window.mammoth);
+  sc.onerror = () => { mammothP = null; rej(new Error('Could not load the Word reader. Check your connection.')); };
+  document.head.appendChild(sc);
+})));
+
+async function readDocx(f) {
+  if (f.size > 40 * 1024 * 1024) throw new Error(`"${f.name}" is too large (max ~40MB).`);
+  const mammoth = await loadMammoth();
+  const arrayBuffer = await f.arrayBuffer();
+  const base = f.name.replace(DOCX, '');
+  const pics = [];
+  let out;
+  try {
+    out = await mammoth.convertToHtml({ arrayBuffer }, {
+      convertImage: mammoth.images.imgElement(async image => {
+        const data = await image.read('base64');
+        const mime = image.contentType || 'image/png';
+        if (pics.length >= 20 || data.length * 0.75 > 8 * 1024 * 1024 || !/^image\//.test(mime)) return { alt: 'picture left out' };
+        pics.push({ name: base + ' picture ' + (pics.length + 1), kind: 'inline', mime, data });
+        return { alt: 'picture ' + pics.length + ' of this document' };
+      })
+    });
+  } catch (e) {
+    throw new Error(`"${f.name}" could not be read as a Word file.`);
+  }
+  const html = (out.value || '').replace(/<img[^>]*alt="([^"]*)"[^>]*>/gi, '[$1]').trim();
+  if (!html && !pics.length) throw new Error(`"${f.name}" has no readable text.`);
+  return [{ name: f.name, kind: 'text', data: html }, ...pics];
+}
+
 function readFile(f) {
+  if (DOCX.test(f.name)) return readDocx(f);
   return new Promise((res, rej) => {
     const r = new FileReader();
     if (TEXT_EXT.test(f.name) || f.type.startsWith('text/')) {
@@ -695,7 +731,7 @@ function readFile(f) {
       if (f.size > 18 * 1024 * 1024) return rej(new Error(`"${f.name}" is too large (max ~18MB).`));
       r.onload = () => res({ name: f.name, kind: 'inline', mime: f.type, data: r.result.split(',')[1] });
       r.readAsDataURL(f);
-    } else rej(new Error(`The format of "${f.name}" is not supported. Convert docx/pptx to PDF first.`));
+    } else rej(new Error(`The format of "${f.name}" is not supported. For .doc or .pptx, save it as .docx or PDF first.`));
     r.onerror = () => rej(r.error);
   });
 }
@@ -1308,107 +1344,6 @@ function buildDeckHtml(deck, mode) {
     '<script>window.__DECK=' + json + ';(' + deckRuntime.toString() + ')();<\/script></body></html>';
 }
 
-// ---------- Google Drive as a source ----------
-// Uses the Picker with the drive.file scope, so the app only ever sees the
-// files the user picks in that dialog. Nothing is written back to Drive.
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const GDOC_EXPORT = {
-  'application/vnd.google-apps.document': 'application/pdf',
-  'application/vnd.google-apps.presentation': 'application/pdf',
-  'application/vnd.google-apps.drawing': 'application/pdf',
-  'application/vnd.google-apps.spreadsheet': 'text/csv'
-};
-const gdCfg = () => ({ id: store.get('gdId', '').trim(), key: store.get('gdKey', '').trim(), app: store.get('gdApp', '').trim() });
-const driveReady = () => { const c = gdCfg(); return !!(c.id && c.key); };
-let gdToken = null, gdExp = 0;
-const scriptCache = {};
-
-function loadScript(src) {
-  if (scriptCache[src]) return scriptCache[src];
-  return scriptCache[src] = new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = src; s.async = true; s.onload = res;
-    s.onerror = () => { delete scriptCache[src]; rej(new Error('Could not load ' + src + '. Check your connection.')); };
-    document.head.appendChild(s);
-  });
-}
-
-async function gdAuth(force) {
-  if (!force && gdToken && Date.now() < gdExp) return gdToken;
-  await loadScript('https://accounts.google.com/gsi/client');
-  return new Promise((res, rej) => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: gdCfg().id,
-      scope: DRIVE_SCOPE,
-      callback: r => {
-        if (r.error) return rej(new Error(r.error_description || r.error));
-        gdToken = r.access_token; gdExp = Date.now() + ((r.expires_in || 3600) - 60) * 1000;
-        res(gdToken);
-      },
-      error_callback: e => rej(new Error(e && e.type === 'popup_closed' ? 'The Google window was closed.' : ((e && (e.message || e.type)) || 'Google sign-in failed.')))
-    });
-    client.requestAccessToken({ prompt: '' });
-  });
-}
-
-async function gdPick(token) {
-  await loadScript('https://apis.google.com/js/api.js');
-  await new Promise(r => gapi.load('picker', r));
-  return new Promise(res => {
-    const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
-      .setIncludeFolders(true).setSelectFolderEnabled(false);
-    const b = new google.picker.PickerBuilder()
-      .setOAuthToken(token)
-      .setDeveloperKey(gdCfg().key)
-      .addView(view)
-      .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
-      .setCallback(d => {
-        if (d.action === google.picker.Action.PICKED) res(d.docs || []);
-        else if (d.action === google.picker.Action.CANCEL) res([]);
-      });
-    if (gdCfg().app) b.setAppId(gdCfg().app);
-    b.build().setVisible(true);
-  });
-}
-
-async function gdFetch(doc, token) {
-  const native = /^application\/vnd\.google-apps\./.test(doc.mimeType || '');
-  const as = native ? GDOC_EXPORT[doc.mimeType] : null;
-  if (native && !as) throw new Error('"' + doc.name + '" is a Google file this app cannot read.');
-  const url = native
-    ? 'https://www.googleapis.com/drive/v3/files/' + doc.id + '/export?mimeType=' + encodeURIComponent(as)
-    : 'https://www.googleapis.com/drive/v3/files/' + doc.id + '?alt=media';
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) throw new Error('Drive would not give "' + doc.name + '" (HTTP ' + r.status + ').');
-  const buf = await r.arrayBuffer();
-  const mime = native ? as : (doc.mimeType || 'application/octet-stream');
-  const name = doc.name + (native ? (as === 'application/pdf' ? '.pdf' : '.csv') : '');
-  if (/^text\//.test(mime) || mime === 'application/json') return { name, kind: 'text', data: new TextDecoder().decode(buf) };
-  if (!/^application\/pdf$|^image\/|^audio\//.test(mime)) throw new Error('"' + name + '" is a format this app cannot read.');
-  if (buf.byteLength > 18 * 1024 * 1024) throw new Error('"' + name + '" is too large (max ~18MB).');
-  return { name, kind: 'inline', mime, data: bufToB64(buf) };
-}
-
-$('btnDrive').onclick = async () => {
-  if (!driveReady()) { msg('Add your Google client ID and Picker API key under Settings first.'); return; }
-  $('btnDrive').disabled = true;
-  try {
-    msg('Opening Google Drive...');
-    const token = await gdAuth();
-    const docs = await gdPick(token);
-    if (!docs.length) { msg(''); return; }
-    let failed = '';
-    for (const d of docs) {
-      msg('Fetching ' + d.name + '...');
-      try { files.push(await gdFetch(d, token)); } catch (e) { failed = e.message || String(e); }
-    }
-    renderChips(); msg(failed);
-  } catch (e) {
-    msg(e.message || String(e));
-  }
-  $('btnDrive').disabled = false;
-};
-
 // ---------- Gemini ----------
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const thinkIdxBy = {};
@@ -1615,7 +1550,7 @@ async function callGemini(snap, note, onStage, signal) {
       ? 'MỨC MINH HOẠ: TỐI GIẢN. Mỗi khối SVG chỉ dùng tối đa khoảng 6 hình cơ bản, mã ngắn gọn (dưới 600 ký tự), không chi tiết trang trí. Mục tiêu là tạo nhanh. Quy tắc mức minh hoạ này CHỈ áp dụng cho hình trang trí do bạn tự nghĩ ra. KHÔNG áp dụng cho công thức, bảng, đoạn code, và hình/sơ đồ/biểu đồ có sẵn trong nguồn: những thứ đó vẫn phải được giữ đầy đủ, chính xác như quy tắc đã nêu.\n\n'
       : '';
   const head = `ACTION: ${snap.action}\n\n` + illTxt +
-    (inl.length ? 'TỆP ĐÍNH KÈM (số thứ tự dùng cho data-src của hình):\n' + inl.map((f, i) => (i + 1) + ': ' + f.name).join('\n') + '\n\n' : '') +
+    (inl.length ? 'TỆP ĐÍNH KÈM (số thứ tự dùng cho data-src của hình; ảnh tên "... picture N" là hình tách ra từ file Word cùng tên, trong phần văn bản nó được đánh dấu [picture N of this document] đúng vị trí):\n' + inl.map((f, i) => (i + 1) + ': ' + f.name).join('\n') + '\n\n' : '') +
     (snap.pages ? 'GIỚI HẠN TRANG: người dùng chỉ muốn dùng các trang ' + snap.pages + ' của tài liệu PDF. Tệp PDF đính kèm đã được cắt sẵn chỉ gồm các trang đó, hãy dùng toàn bộ nội dung của nó và không nhắc tới trang khác. Với link tới PDF, chỉ đọc và dùng đúng các trang này.\n\n' : '') +
     (snap.notices ? 'LƯU Ý THÊM CỦA NGƯỜI DÙNG (hãy làm theo; nếu lưu ý yêu cầu rõ ràng khác với quy tắc mặc định thì ưu tiên lưu ý của người dùng, nhưng vẫn phải giữ đúng giao thức đầu ra @@):\n' + snap.notices + '\n\n' : '') +
     (snap.links.length ? 'LINK NGUỒN:\n' + snap.links.map(l => '- ' + l).join('\n') + '\n\n' : '') +
@@ -2248,7 +2183,7 @@ function renderSecBody() {
     on
       ? 'Sync is on, so an encrypted copy of your library sits in the vault on this site\'s server.'
       : 'Sync is off, so nothing from your library has been sent to any server.',
-    ['When this page does talk to the internet', 'Only when you ask it to. Pressing Summarize or Keep original sends your sources to Google\'s Gemini API with your own API key' + (on ? ', and syncing sends encrypted blocks to this site.' : '. Nothing else leaves this device.') + (driveReady() ? ' Picking a file from Drive downloads that one file to this browser; the app can reach the files you pick and nothing else in your Drive.' : '')]
+    ['When this page does talk to the internet', 'Only when you ask it to. Pressing Summarize or Keep original sends your sources to Google\'s Gemini API with your own API key' + (on ? ', and syncing sends encrypted blocks to this site.' : '. Nothing else leaves this device.')]
   ]);
   specHowto(first, 'Check for yourself what this page sends', [
     ['Open the developer tools: ', 'F12', ' or ', 'Ctrl Shift I', '. On a Mac it is ', '⌥ ⌘ I', '.'],
@@ -2331,7 +2266,6 @@ $('btnSettings').onclick = () => {
   $('setAuto').checked = store.get('autosw', '1') === '1';
   $('setIll').value = store.get('ill', 'simple');
   $('setFs').checked = store.get('fs', '0') === '1';
-  $('setGdId').value = store.get('gdId', ''); $('setGdKey').value = store.get('gdKey', ''); $('setGdApp').value = store.get('gdApp', '');
   fillModelList();
   $('setGuide').value = store.get('gg') || DEFAULT_GUIDE;
   $('settings').showModal();
@@ -2342,8 +2276,6 @@ $('btnSaveSettings').onclick = () => {
   store.set('gk', $('setKey').value.trim());
   store.set('gm', $('setModel').value.trim() || 'gemini-3.8-flash');
   store.set('sp', $('setSpeed').value); store.set('autosw', $('setAuto').checked ? '1' : '0'); store.set('ill', $('setIll').value); store.set('fs', $('setFs').checked ? '1' : '0');
-  store.set('gdId', $('setGdId').value.trim()); store.set('gdKey', $('setGdKey').value.trim()); store.set('gdApp', $('setGdApp').value.trim());
-  gdToken = null;
   Object.keys(thinkIdxBy).forEach(k => delete thinkIdxBy[k]);
   const g = $('setGuide').value.trim();
   store.set('gg', g === DEFAULT_GUIDE ? '' : g);
