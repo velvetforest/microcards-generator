@@ -2278,7 +2278,13 @@ function jobTile(j) {
 
 function renderCrumb() {
   const c = $('crumb'); c.innerHTML = '';
-  if (!curFolder) { c.innerHTML = '<h2>Library</h2>'; return; }
+  if (!curFolder) {
+    c.innerHTML = '<h2>Library</h2>';
+    const nb = document.createElement('button'); nb.className = 'btn'; nb.textContent = '+ New folder';
+    nb.onclick = () => newFolder();
+    c.appendChild(nb);
+    return;
+  }
   const f = folders.find(x => x.id === curFolder);
   const back = document.createElement('button'); back.className = 'back'; back.textContent = '← Library';
   back.onclick = () => { curFolder = null; renderAll(); };
@@ -2290,7 +2296,7 @@ function renderCrumb() {
 
 function renderFolderSel() {
   const sel = $('folderSel'); const prev = sel.value;
-  sel.innerHTML = '<option value="">+ New folder (auto-named)</option>';
+  sel.innerHTML = '<option value="">+ New folder (auto-named)</option><option value="__new">+ New folder, name it...</option>';
   folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.name; sel.appendChild(o); });
   sel.value = curFolder || (folders.find(f => f.id === prev) ? prev : '');
 }
@@ -2309,7 +2315,7 @@ function renderGrid() {
       t.onclick = () => { curFolder = f.id; renderAll(); };
       g.appendChild(t);
     });
-    if (!folders.length && !jobs.length) g.innerHTML = '<div class="empty">No folders yet. Upload a file or paste a link, then press Summarize / Keep original.</div>';
+    if (!folders.length && !jobs.length) g.innerHTML = '<div class="empty">No folders yet. Make one with New folder, or upload a file or paste a link and press Summarize / Keep original.</div>';
     return;
   }
   jobs.filter(j => j.snapshot.folderId === curFolder).forEach(j => g.appendChild(jobTile(j)));
@@ -2334,6 +2340,22 @@ function renderAll() {
   if (curFolder && !folders.find(f => f.id === curFolder)) curFolder = null;
   renderCrumb(); renderFolderSel(); renderGrid();
 }
+
+// A folder can be made and named before anything goes in it; the next card
+// set is then saved there.
+async function newFolder() {
+  const n = prompt('Folder name:', '');
+  if (n === null || !n.trim()) return null;
+  const f = { id: uuid(), name: n.trim(), created: Date.now(), updated: Date.now() };
+  await dbPut('folders', f); folders.unshift(f);
+  renderAll(); $('folderSel').value = f.id; syncSoon();
+  return f;
+}
+$('folderSel').addEventListener('change', async e => {
+  if (e.target.value !== '__new') return;
+  e.target.value = '';
+  await newFolder();
+});
 
 async function renameFolder(id) {
   const f = folders.find(x => x.id === id); if (!f) return;
