@@ -1150,51 +1150,156 @@ function inkBlocks(g, rx, ry) {
   return blocks;
 }
 
-function snapBox(cv, core) {                       // core and result: [y0, x0, y1, x1] in pixels
-  const W = cv.width, H = cv.height;
-  const clampBox = b => [Math.max(0, b[0]), Math.max(0, b[1]), Math.min(H, b[2]), Math.min(W, b[3])].map(Math.round);
-  const loose = () => clampBox([core[0] - H * 0.025, core[1] - W * 0.025, core[2] + H * 0.025, core[3] + W * 0.025]);
-  const g = inkGrid(cv), st = g.step;
-  const hint = core.map(v => v / st);
-  const area = b => Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
-  const meet = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+// Long thin rules, such as table borders or a frame drawn around a figure,
+// join a figure and the text near it into one block. Erasing them lets the
+// blocks come apart again.
+function stripRules(g) {
+  const { gw, gh } = g, src = g.ink, ink = src.slice(), t = 2;
+  const at = (x, y) => x >= 0 && y >= 0 && x < gw && y < gh && src[y * gw + x];
+  const sweep = (len, across, minRun, cell) => {
+    for (let j = 0; j < across; j++) {
+      for (let i = 0; i < len;) {
+        if (!at(...cell(i, j))) { i++; continue; }
+        let e = i; while (e < len && at(...cell(e, j))) e++;
+        if (e - i >= minRun) {
+          let near = 0;                            // a rule has blank paper on both sides
+          for (let k = i; k < e; k++) near += (at(...cell(k, j - t - 1)) ? 1 : 0) + (at(...cell(k, j + t + 1)) ? 1 : 0);
+          if (near < (e - i) * 0.3)
+            for (let d = -t; d <= t; d++) for (let k = i; k < e; k++) { const [x, y] = cell(k, j + d); if (x >= 0 && y >= 0 && x < gw && y < gh) ink[y * gw + x] = 0; }
+        }
+        i = e;
+      }
+    }
+  };
+  sweep(gw, gh, Math.round(gw * 0.2), (i, j) => [i, j]);
+  sweep(gh, gw, Math.round(gh * 0.12), (i, j) => [j, i]);
+  return { ...g, ink };
+}
 
-  let dense = 0;                                   // a scan or a full-bleed photo: nothing to snap to
-  const hy0 = Math.floor(hint[0]), hy1 = Math.ceil(hint[2]), hx0 = Math.floor(hint[1]), hx1 = Math.ceil(hint[3]);
-  for (let y = Math.max(0, hy0); y < Math.min(g.gh, hy1); y++) for (let x = Math.max(0, hx0); x < Math.min(g.gw, hx1); x++) dense += g.ink[y * g.gw + x];
-  if (dense > area(hint) * 0.55) return loose();
+const boxArea = b => Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
+const boxMeet = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
 
-  const blocks = inkBlocks(g, Math.max(2, Math.round(W * 0.0125 / st)), Math.max(2, Math.round(H * 0.007 / st)));
-  // the block the hint covers the most of; a frame around the whole page is not a figure
+// The block the hint covers the most of, plus a panel beside it or anything
+// else the hint takes in nearly whole.
+function pickBlocks(blocks, hint, maxArea) {
   let main = null, best = 0;
   for (const b of blocks) {
-    const o = area(meet(b, hint));
-    if (o > best && area(b) <= Math.max(area(hint) * 4, 1) && area(b) < g.gw * g.gh * 0.7) { best = o; main = b; }
+    const o = boxArea(boxMeet(b, hint));
+    if (o > best && boxArea(b) <= maxArea) { best = o; main = b; }
   }
-  if (!main) return loose();
+  if (!main) return null;
   const box = main.slice();
   for (const b of blocks) {
     if (b === main) continue;
-    const cover = area(meet(b, hint)) / Math.max(1, area(b));
+    const cover = boxArea(boxMeet(b, hint)) / Math.max(1, boxArea(b));
     const rowsShared = Math.min(b[2], main[2]) - Math.max(b[0], main[0]);
     const beside = rowsShared >= Math.min(b[2] - b[0], main[2] - main[0]) * 0.6;
-    // a panel next to the main one, or anything the hint takes in nearly whole
     if ((beside && cover >= 0.25) || cover >= 0.85) {
       box[0] = Math.min(box[0], b[0]); box[1] = Math.min(box[1], b[1]); box[2] = Math.max(box[2], b[2]); box[3] = Math.max(box[3], b[3]);
     }
   }
+  return { box, main };
+}
+
+// core, pics, texts and the result are [y0, x0, y1, x1] in pixels; pics are
+// the pictures embedded in the page, which carry their exact edges, and texts
+// the lines of body text, which are never part of a figure.
+function snapBox(cv, core, pics, texts) {
+  const W = cv.width, H = cv.height;
+  const clampBox = b => [Math.max(0, b[0]), Math.max(0, b[1]), Math.min(H, b[2]), Math.min(W, b[3])].map(Math.round);
+  const loose = () => clampBox([core[0] - H * 0.025, core[1] - W * 0.025, core[2] + H * 0.025, core[3] + W * 0.025]);
+
+  // a pasted picture: logos and full-page scans aside, its own frame is the crop
+  const ps = (pics || []).map(clampBox).filter(r => boxArea(r) > W * H * 0.004 && boxArea(r) < W * H * 0.8);
+  const hit = pickBlocks(ps, core, Infinity);
+  if (hit && boxArea(boxMeet(hit.main, core)) >= 0.3 * Math.min(boxArea(hit.main), boxArea(core))) {
+    const pp = Math.round(Math.min(W, H) * 0.004), b = hit.box;
+    return clampBox([b[0] - pp, b[1] - pp, b[2] + pp, b[3] + pp]);
+  }
+
+  let g = inkGrid(cv);
+  const st = g.step, hint = core.map(v => v / st);
+  let dense = 0;                                   // a scan or a full-bleed photo: nothing to snap to
+  const hy0 = Math.floor(hint[0]), hy1 = Math.ceil(hint[2]), hx0 = Math.floor(hint[1]), hx1 = Math.ceil(hint[3]);
+  for (let y = Math.max(0, hy0); y < Math.min(g.gh, hy1); y++) for (let x = Math.max(0, hx0); x < Math.min(g.gw, hx1); x++) dense += g.ink[y * g.gw + x];
+  if (dense > boxArea(hint) * 0.55) return loose();
+
+  if (texts && texts.length) {                     // prose sitting close to a figure would join its block
+    const ink = g.ink.slice();
+    for (const r of texts)
+      for (let y = Math.max(0, Math.floor(r[0] / st)); y < Math.min(g.gh, Math.ceil(r[2] / st)); y++)
+        ink.fill(0, y * g.gw + Math.max(0, Math.floor(r[1] / st)), y * g.gw + Math.min(g.gw, Math.ceil(r[3] / st)));
+    g = { ...g, ink };
+  }
+  const rx = Math.max(2, Math.round(W * 0.0125 / st)), ry = Math.max(2, Math.round(H * 0.007 / st));
+  // a block far larger than the hint is the figure grown into its surroundings
+  const maxArea = Math.min(Math.max(boxArea(hint) * 4, 1), g.gw * g.gh * 0.7);
+  const found = pickBlocks(inkBlocks(g, rx, ry), hint, maxArea) || pickBlocks(inkBlocks(stripRules(g), rx, ry), hint, maxArea);
+  if (!found) return loose();
   // never wander far from the hint, in case a figure runs into body text
   const ey = Math.max(g.gh * 0.15, (hint[2] - hint[0]) * 0.5), ex = Math.max(g.gw * 0.15, (hint[3] - hint[1]) * 0.5);
-  const snapped = meet(box, [hint[0] - ey, hint[1] - ex, hint[2] + ey, hint[3] + ex]);
+  const snapped = boxMeet(found.box, [hint[0] - ey, hint[1] - ex, hint[2] + ey, hint[3] + ex]);
 
   const pad = Math.round(Math.min(W, H) * 0.012);
-  const out = clampBox([snapped[0] * st - pad, snapped[1] * st - pad, snapped[2] * st + pad, snapped[3] * st + pad]);
-  return area(out) < area(core) * 0.2 ? loose() : out;   // snapped onto a stray mark: trust the hint
+  const tight = snapped.map(v => v * st);
+  const out = clampBox([tight[0] - pad, tight[1] - pad, tight[2] + pad, tight[3] + pad]);
+  for (const r of texts || []) {                   // the margin stops short of the prose around
+    if (boxArea(boxMeet(r, tight)) > 0 || boxArea(boxMeet(r, out)) === 0) continue;
+    if (r[0] >= tight[2]) out[2] = Math.min(out[2], Math.floor(r[0]));
+    else if (r[2] <= tight[0]) out[0] = Math.max(out[0], Math.ceil(r[2]));
+    else if (r[1] >= tight[3]) out[3] = Math.min(out[3], Math.floor(r[1]));
+    else if (r[3] <= tight[1]) out[1] = Math.max(out[1], Math.ceil(r[3]));
+  }
+  return boxArea(out) < boxArea(core) * 0.2 ? loose() : out;   // snapped onto a stray mark: trust the hint
+}
+
+// Lines of body text from the PDF's own text layer: a long run of words on one
+// baseline is prose, while a label inside a figure is short.
+async function pageTextLines(page, vp) {
+  const t = vp.transform, k = Math.hypot(t[0], t[1]), items = [];
+  for (const it of (await page.getTextContent()).items) {
+    if (!it.str || !it.str.trim() || !it.transform) continue;
+    const m = it.transform;
+    const a = t[0] * m[0] + t[2] * m[1], b = t[1] * m[0] + t[3] * m[1], c = t[0] * m[2] + t[2] * m[3], d = t[1] * m[2] + t[3] * m[3];
+    if (Math.abs(b) > Math.abs(a) * 0.05) continue;        // turned text, e.g. an axis title
+    items.push({ x: t[0] * m[4] + t[2] * m[5] + t[4], y: t[1] * m[4] + t[3] * m[5] + t[5], w: it.width * k, size: Math.hypot(c, d) });
+  }
+  items.sort((p, q) => p.y - q.y || p.x - q.x);
+  const lines = [];
+  for (const it of items) {
+    const l = lines.find(l => Math.abs(l.y - it.y) < 0.35 * Math.max(l.size, it.size) && it.x - l.x1 < 1.5 * it.size && it.x + it.w > l.x0 - 1.5 * it.size);
+    if (l) { l.x0 = Math.min(l.x0, it.x); l.x1 = Math.max(l.x1, it.x + it.w); l.size = Math.max(l.size, it.size); }
+    else lines.push({ y: it.y, x0: it.x, x1: it.x + it.w, size: it.size });
+  }
+  return lines.filter(l => l.x1 - l.x0 >= vp.width * 0.3).map(l => [l.y - l.size * 1.2, l.x0, l.y + l.size * 0.4, l.x1]);
+}
+
+// Where each picture lands on the rendered page, read from the drawing
+// commands: a picture is a unit square under the current transform.
+async function pagePictures(page, vp) {
+  const O = (await loadPdfJs()).OPS, ops = await page.getOperatorList({ intent: 'print' });
+  const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+  const paints = new Set([O.paintImageXObject, O.paintInlineImageXObject, O.paintJpegXObject].filter(v => v != null));
+  let m = vp.transform.slice();
+  const stack = [], out = [];
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const fn = ops.fnArray[i], a = ops.argsArray[i];
+    if (fn === O.save) stack.push(m);
+    else if (fn === O.restore) m = stack.pop() || m;
+    else if (fn === O.transform) m = mul(m, a);
+    else if (fn === O.paintFormXObjectBegin) { stack.push(m); if (a && a[0]) m = mul(m, a[0]); }
+    else if (fn === O.paintFormXObjectEnd) m = stack.pop() || m;
+    else if (paints.has(fn)) {
+      const xs = [m[4], m[0] + m[4], m[2] + m[4], m[0] + m[2] + m[4]], ys = [m[5], m[1] + m[5], m[3] + m[5], m[1] + m[3] + m[5]];
+      out.push([Math.min(...ys), Math.min(...xs), Math.max(...ys), Math.max(...xs)]);
+    }
+  }
+  return out;
 }
 
 async function cropFigure(f, pageNo, boxStr) {
   const nb = parseBox(boxStr);
-  let cv;
+  let cv, pics = [], texts = [];
   if (f.mime.startsWith('image/')) {
     const img = new Image(); img.src = 'data:' + f.mime + ';base64,' + f.data; await img.decode();
     cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
@@ -1209,9 +1314,10 @@ async function cropFigure(f, pageNo, boxStr) {
     cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
     const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
     await page.render({ canvasContext: c, viewport: vp, intent: 'print' }).promise;
+    if (nb) [pics, texts] = await Promise.all([pagePictures(page, vp).catch(() => []), pageTextLines(page, vp).catch(() => [])]);
   }
   const W = cv.width, H = cv.height;
-  const box = nb ? snapBox(cv, [nb[0] / 1000 * H, nb[1] / 1000 * W, nb[2] / 1000 * H, nb[3] / 1000 * W]) : [0, 0, H, W];
+  const box = nb ? snapBox(cv, [nb[0] / 1000 * H, nb[1] / 1000 * W, nb[2] / 1000 * H, nb[3] / 1000 * W], pics, texts) : [0, 0, H, W];
   let sw = Math.max(1, box[3] - box[1]), sh = Math.max(1, box[2] - box[0]);
   const k = Math.min(1, 1800 / Math.max(sw, sh));          // keep a deck light
   const out = document.createElement('canvas'); out.width = Math.round(sw * k); out.height = Math.round(sh * k);
