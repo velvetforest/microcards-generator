@@ -164,6 +164,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 #btnLock svg{flex:none}
 #btnLock.on{background:var(--soft);color:var(--deep);border-color:var(--accent);box-shadow:var(--glow)}
 #btnLock.on #lockTxt{font-variant-numeric:tabular-nums}
+.lockq{font-size:13px;font-weight:600;color:var(--deep);line-height:1.5}
 .lockopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
 .lockopts .btn{justify-content:center;height:44px}
 #lockGate{width:min(420px,92vw);text-align:left}
@@ -311,7 +312,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 
 <dialog id="lockDlg">
   <h3>Lock in</h3>
-  <p style="margin:0 0 14px">For focus, you will not be able to escape this site. Lock in for?</p>
+  <p class="lockq" style="margin:0 0 14px">For focus, you will not be able to escape this site. Lock in for?</p>
   <div class="lockopts">
     <button class="btn" data-min="0">Until I turn it off</button>
     <button class="btn" data-min="25">25 minutes</button>
@@ -325,7 +326,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 
 <dialog id="lockGate">
   <h3>Still locked in</h3>
-  <p style="margin:0 0 4px">You left full screen. <b id="lockGateTime"></b></p>
+  <p class="lockq" style="margin:0 0 4px">You left full screen. <b id="lockGateTime"></b></p>
   <div class="row" style="margin-top:16px"><span class="spacer"></span><button class="btn primary" id="lockBack">Back to focus</button></div>
 </dialog>
 
