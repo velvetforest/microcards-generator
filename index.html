@@ -2565,6 +2565,28 @@ async function api(path, opt) {
   return r.json();
 }
 
+// Records travel raw, the stamp in a header, so the server only copies bytes:
+// a deck with pictures is several MB, more than it could parse in time. A
+// server that still wants JSON gets JSON.
+async function putRec(rec, updatedAt, enc) {
+  const url = vaultApi() + '/' + vaultId + '/' + rec;
+  const r = await fetch(url, { method: 'PUT', headers: { 'content-type': 'text/plain', 'x-updated-at': String(updatedAt) }, body: enc });
+  if (r.status === 400) return api('/' + vaultId + '/' + rec, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updatedAt, enc }) });
+  if (!r.ok) {
+    let m = 'HTTP ' + r.status;
+    try { m = (await r.json()).error || m; } catch (e) {}
+    if (r.status === 413) m = 'too large to sync';
+    throw new Error(m);
+  }
+}
+async function getRec(path) {
+  const r = await fetch(vaultApi() + path + '?raw=1');
+  if (r.status === 404) throw new Error('No such record.');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (/json/i.test(r.headers.get('content-type') || '')) return (await r.json()).enc;   // an older server
+  return r.text();
+}
+
 const recOf = (kind, id) => (kind === 'item' ? 'i_' : 'f_') + id;
 const tombRec = (kind, id) => 't_' + (kind === 'item' ? 'i_' : 'f_') + id;
 const findEnt = (kind, id) => (kind === 'item' ? items : folders).find(x => x.id === id);
@@ -2573,6 +2595,8 @@ async function syncNow(quiet) {
   if (syncing || !synced()) return;
   syncing = true; syncErr = ''; syncStage = 'Checking...'; renderSync();
   let pulled = 0, pushed = 0;
+  const failed = [];                                // one bad deck must not hold back the rest
+  const nameOf = e => '"' + (e.title || e.name || 'untitled') + '"';
   try {
     await ensureKey();
     const remote = new Map((await api('/' + vaultId + '?meta=1')).records.map(r => [r.record, r.updatedAt]));
@@ -2599,7 +2623,7 @@ async function syncNow(quiet) {
       const rec = tombRec(t.kind, t.eid);
       if (!remote.has(rec)) {
         syncStage = 'Sending a deletion...'; renderSync();
-        await api('/' + vaultId + '/' + rec, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updatedAt: t.deleted, enc: await encJson(syncKey, { kind: t.kind, id: t.eid, deleted: t.deleted }) }) });
+        await putRec(rec, t.deleted, await encJson(syncKey, { kind: t.kind, id: t.eid, deleted: t.deleted }));
       }
       const ent = recOf(t.kind, t.eid);
       if (remote.has(ent) && remote.get(ent) <= t.deleted) { await api('/' + vaultId + '/' + ent, { method: 'DELETE' }); remote.delete(ent); }
@@ -2616,25 +2640,46 @@ async function syncNow(quiet) {
     for (let i = 0; i < want.length; i++) {
       const [kind, rec] = want[i];
       syncStage = 'Receiving ' + (i + 1) + '/' + want.length + '...'; renderSync();
-      const got = await api('/' + vaultId + '/' + rec);
-      const obj = await decJson(syncKey, got.enc);
+      let obj;
+      try { obj = await decJson(syncKey, await getRec('/' + vaultId + '/' + rec)); }
+      catch (e) {
+        if (/operation-specific reason|decrypt/i.test(e.message || '')) throw e;
+        failed.push('a card set could not be received (' + (e.message || e) + ')'); continue;
+      }
       if (kind === 'item') { await dbPut('items', obj); items = items.filter(x => x.id !== obj.id).concat(obj); }
       else { await dbPut('folders', obj); folders = folders.filter(x => x.id !== obj.id).concat(obj); }
       pulled++;
     }
-    // 4. push what is newer here
+    // 4. push what is newer here. The vault's list runs up to a minute behind,
+    // so something sent in the last few minutes is not sent again just because
+    // the list does not show it yet; and a deck the vault refused as too large
+    // waits until it changes rather than going up again on every sync.
+    const sent = JSON.parse(store.get('syncSent', '{}')), big = JSON.parse(store.get('syncBig', '{}'));
+    for (const k of Object.keys(sent)) if (Date.now() - sent[k][1] > 10 * 60000) delete sent[k];
     const mine = [...folders.map(x => ['folder', x]), ...items.map(x => ['item', x])]
-      .filter(([k, e]) => !tombs.has(k + ':' + e.id) && (!remote.has(recOf(k, e.id)) || stamp(e) > remote.get(recOf(k, e.id))));
+      .filter(([k, e]) => {
+        const rec = recOf(k, e.id);
+        if (tombs.has(k + ':' + e.id) || (remote.has(rec) && stamp(e) <= remote.get(rec))) return false;
+        if (big[rec] === stamp(e)) { failed.push(nameOf(e) + ' is too large to sync'); return false; }
+        return !(sent[rec] && sent[rec][0] === stamp(e));
+      });
     for (let i = 0; i < mine.length; i++) {
-      const [kind, e] = mine[i];
+      const [kind, e] = mine[i], rec = recOf(kind, e.id);
       syncStage = 'Sending ' + (i + 1) + '/' + mine.length + '...'; renderSync();
-      await api('/' + vaultId + '/' + recOf(kind, e.id), { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updatedAt: stamp(e), enc: await encJson(syncKey, e) }) });
-      pushed++;
+      try { await putRec(rec, stamp(e), await encJson(syncKey, e)); pushed++; sent[rec] = [stamp(e), Date.now()]; }
+      catch (err) {
+        if (/too large/i.test(err.message || '')) big[rec] = stamp(e);
+        failed.push(nameOf(e) + ' could not be sent (' + (err.message || err) + ')');
+      }
     }
+    store.set('syncSent', JSON.stringify(sent)); store.set('syncBig', JSON.stringify(big));
     items.sort((a, b) => b.created - a.created); folders.sort((a, b) => b.created - a.created);
     store.set('synclast', String(Date.now()));
     renderAll();
-    if (!quiet || pulled || pushed) toast(pulled || pushed ? 'Synced: received ' + pulled + ', sent ' + pushed + '.' : 'Already up to date.');
+    if (failed.length) {
+      syncErr = failed.length + (failed.length > 1 ? ' card sets' : ' card set') + ' did not sync: ' + failed.slice(0, 3).join('; ') + (failed.length > 3 ? '; ...' : '') + '. The rest did.';
+      toast('Synced: received ' + pulled + ', sent ' + pushed + '. ' + failed.length + ' did not sync.');
+    } else if (!quiet || pulled || pushed) toast(pulled || pushed ? 'Synced: received ' + pulled + ', sent ' + pushed + '.' : 'Already up to date.');
   } catch (e) {
     syncErr = /operation-specific reason|decrypt/i.test(e.message || '') ? 'Could not decrypt the vault. The sync code does not match this vault.' : (e.message || String(e));
     if (!quiet) toast(syncErr);
@@ -2669,7 +2714,8 @@ async function pinKey(pin) {
 
 function pinTick() {
   const left = pinUntil - Date.now();
-  if (left <= 0) { clearInterval(pinTimer); pinTimer = null; $('syPinBox').hidden = true; return; }
+  if (left <= 0) { clearInterval(pinTimer); pinTimer = null; $('syPinBox').hidden = true; followUp(); return; }
+  if (Math.round(left / 1000) % 30 === 0) syncNow(true);   // pick up the new device as soon as it sends
   const m = Math.floor(left / 60000), sec = Math.floor((left % 60000) / 1000);
   $('syPinLeft').textContent = 'Expires in ' + m + ':' + String(sec).padStart(2, '0') + '.';
 }
@@ -2688,23 +2734,45 @@ async function makePin() {
   $('syPair').disabled = false; renderSync();
 }
 
+// A new code can take up to a minute to reach the server this device talks
+// to, and that server remembers a miss for a minute more, so a fresh code is
+// looked for again for about 90 seconds before giving up. The server expires
+// the envelope itself; the clock check only allows for clocks a little apart.
 async function usePin(raw) {
   const pin = normPin(raw);
   if (pin.length !== 6) { syncErr = 'The pairing code is six digits.'; renderSync(); return; }
   syncErr = ''; syncStage = 'Looking for the other device...'; syncing = true; renderSync();
   let invite = null, vid = '';
-  try {
-    vid = await pinVault(pin);
-    const got = await api('/' + vid + '/invite');
-    invite = await decJson(await pinKey(pin), got.enc);
-  } catch (e) {
-    syncErr = /No such record/i.test(e.message || '') ? 'No device is offering that code. Check the digits, or make a new code on the other device.' : (e.message || String(e));
+  const t0 = Date.now(), waits = [0, 4, 8, 12, 15, 15, 15, 20];
+  for (let i = 0; i < waits.length && !invite; i++) {
+    if (waits[i]) {
+      syncStage = 'Waiting for the code to arrive. This can take a minute... (' + Math.round((Date.now() - t0) / 1000) + 's)'; renderSync();
+      await new Promise(r => setTimeout(r, waits[i] * 1000));
+    }
+    try {
+      vid = vid || await pinVault(pin);
+      invite = await decJson(await pinKey(pin), await getRec('/' + vid + '/invite'));
+    } catch (e) {
+      if (/No such record/i.test(e.message || '')) { syncErr = 'No device is offering that code. Check the digits, or make a new code on the other device.'; continue; }
+      syncErr = /operation-specific reason|decrypt/i.test(e.message || '') ? 'That code does not match. Check the digits.' : (e.message || String(e));
+      break;
+    }
   }
   syncing = false; syncStage = '';
   if (!invite) { renderSync(); return; }
-  if (!invite.exp || invite.exp < Date.now()) { syncErr = 'That code has expired. Make a new one on the other device.'; renderSync(); return; }
+  if (!invite.exp || invite.exp + 15 * 60000 < Date.now()) { syncErr = 'That code has expired. Make a new one on the other device.'; renderSync(); return; }
+  syncErr = '';
   api('/' + vid + '/invite', { method: 'DELETE' }).catch(() => {});   // one shot
   await useCode(invite.code);
+  followUp();
+}
+
+// Each device only sees what the other sent once the vault's list catches up,
+// which takes up to a minute, so a fresh pair syncs again a little later.
+let followTimers = [];
+function followUp() {
+  followTimers.forEach(clearTimeout);
+  followTimers = [30, 75, 150].map(sec => setTimeout(() => syncNow(true), sec * 1000));
 }
 
 // ---- sync dialog

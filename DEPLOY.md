@@ -54,10 +54,17 @@ command needs no arguments.
 
 ## Good to know
 
-- **Workers KV lists are eventually consistent.** A record is written
-  immediately, but it can take up to about a minute to show up in the listing
-  the app uses to work out what changed. A second device may therefore need a
-  second sync a minute later to see brand new card sets.
+- **Workers KV is eventually consistent.** A record is written immediately,
+  but it can take up to about a minute to show up in the listing the app uses
+  to work out what changed, or to be readable from another Cloudflare
+  location. The app allows for this: a pairing code is looked for again for
+  about 90 seconds, and newly paired devices sync again a few times over the
+  next couple of minutes.
+- **Records travel raw.** A deck with pictures can be several MB, and the free
+  plan gives a request about 10 ms of CPU, so the Function never parses a
+  record: the ciphertext is copied into KV and streamed back out. A single
+  record is capped at 24 MB; a larger deck is reported and skipped until it
+  changes.
 - **The free KV plan allows about 1,000 writes a day.** Each folder or card set
   is one write per sync, so personal use stays well inside it.
 - **The server never holds a key.** The sync code stays in the browser and

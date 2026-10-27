@@ -5,16 +5,24 @@
 // of the sync code, so this Worker cannot derive the key from it either.
 //
 // Stored per record: the ciphertext string and the client's updatedAt stamp.
+//
+// A record can be several MB (decks carry their pictures), and the free plan
+// gives a request about 10 ms of CPU, so records travel raw: the stamp rides
+// in an x-updated-at header and the ciphertext is never parsed here, only
+// copied in and streamed out. The JSON form is still accepted for older
+// pages.
 
 const MAX_BODY = 24 * 1024 * 1024; // KV allows 25 MB per value
 const RAW_LIMIT = 20;              // records returned by the plain GET
 const ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 const REC_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
+const INVITE_TTL = 15 * 60;        // seconds; a pairing code lives 10 minutes
 
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,PUT,DELETE,OPTIONS',
-  'access-control-allow-headers': 'content-type',
+  'access-control-allow-headers': 'content-type,x-updated-at',
+  'access-control-expose-headers': 'x-updated-at',
   'access-control-max-age': '86400'
 };
 const json = (obj, status = 200) => new Response(JSON.stringify(obj, null, 2), {
@@ -46,19 +54,38 @@ export async function onRequest({ request, env, params }) {
   // ---- one record
   if (rec) {
     const key = prefix + rec;
+    // pairing envelopes also expire on their own, whatever the clocks say
+    const opts = u => Object.assign({ metadata: { u } }, rec === 'invite' ? { expirationTtl: INVITE_TTL } : {});
     if (request.method === 'GET') {
+      if (new URL(request.url).searchParams.get('raw') === '1') {
+        const got = await env.VAULT.getWithMetadata(key, { type: 'stream' });
+        if (got.value === null) return json({ error: 'No such record.' }, 404);
+        return new Response(got.value, { headers: {
+          'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store',
+          'x-updated-at': String((got.metadata && got.metadata.u) || 0), ...CORS } });
+      }
       const got = await env.VAULT.getWithMetadata(key);
       if (got.value === null) return json({ error: 'No such record.' }, 404);
       return json({ record: rec, updatedAt: (got.metadata && got.metadata.u) || 0, enc: got.value });
     }
     if (request.method === 'PUT') {
+      const stamp = request.headers.get('x-updated-at');
+      if (stamp !== null) {
+        if (Number(request.headers.get('content-length')) > MAX_BODY) return json({ error: 'Record too large.' }, 413);
+        const buf = await request.arrayBuffer();
+        if (buf.byteLength > MAX_BODY) return json({ error: 'Record too large.' }, 413);
+        if (!buf.byteLength) return json({ error: 'Missing enc.' }, 400);
+        const u = Number(stamp) || 0;
+        await env.VAULT.put(key, buf, opts(u));
+        return json({ ok: true, record: rec, updatedAt: u });
+      }
       const raw = await request.text();
       if (raw.length > MAX_BODY) return json({ error: 'Record too large.' }, 413);
       let body;
       try { body = JSON.parse(raw); } catch { return json({ error: 'Body must be JSON.' }, 400); }
       const enc = body && body.enc, u = Number(body && body.updatedAt) || 0;
       if (typeof enc !== 'string' || !enc) return json({ error: 'Missing enc.' }, 400);
-      await env.VAULT.put(key, enc, { metadata: { u } });
+      await env.VAULT.put(key, enc, opts(u));
       return json({ ok: true, record: rec, updatedAt: u });
     }
     if (request.method === 'DELETE') {
