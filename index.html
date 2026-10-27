@@ -500,12 +500,13 @@ QUY TẮC VẬN HÀNH (ưu tiên cao nhất):
 
 // ---------- IndexedDB ----------
 const dbp = new Promise((res, rej) => {
-  const r = indexedDB.open('card-studio', 3);
+  const r = indexedDB.open('card-studio', 4);
   r.onupgradeneeded = () => {
     const db = r.result;
     if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', { keyPath: 'id' });
     if (!db.objectStoreNames.contains('folders')) db.createObjectStore('folders', { keyPath: 'id' });
     if (!db.objectStoreNames.contains('tomb')) db.createObjectStore('tomb', { keyPath: 'id' });
+    if (!db.objectStoreNames.contains('draft')) db.createObjectStore('draft', { keyPath: 'id' });
   };
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -650,7 +651,36 @@ function applyTheme(t) {
 $('themeSw').onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 applyTheme(store.get('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 
+// What sits in the box is kept on the device, and so is what a running deck
+// took out of it, so a reload, a closed tab or a crash never loses a source.
+// Only the reader's own × or a finished deck lets go of one.
+let draftT = null, draftReady = false;   // never save over the stored box before it is read back
+function saveDraft() {
+  if (!draftReady) return;
+  clearTimeout(draftT);
+  draftT = setTimeout(() => dbPut('draft', { id: 'composer', files, links, text: $('textInput').value }).catch(() => {}), 300);
+}
+const holdSources = (job, orig) => dbPut('draft', { id: 'job:' + job.id, orig, created: Date.now() }).catch(() => {});
+const releaseSources = job => dbDel('draft', 'job:' + job.id).catch(() => {});
+async function loadDraft() {
+  let all = [];
+  try { all = await tx('draft', 'readonly', st => st.getAll()) || []; } catch { draftReady = true; return; }
+  draftReady = true;
+  const box = all.find(d => d.id === 'composer');
+  if (box) {
+    (box.files || []).forEach(f => files.push(f));
+    (box.links || []).forEach(l => { if (!links.includes(l)) links.push(l); });
+    if (box.text && !$('textInput').value.trim()) $('textInput').value = box.text;
+  }
+  const cut = all.filter(d => d.id.startsWith('job:'));
+  cut.forEach(d => putBack(d.orig));
+  renderChips();
+  if (cut.length) msg('A card set was still being made when the page closed, so its sources are back in the box.');
+  for (const d of cut) await dbDel('draft', d.id).catch(() => {});
+}
+
 function renderChips() {
+  saveDraft();
   const many = files.length > 1;
   $('splitWrap').style.opacity = many ? '1' : '.45';
   $('splitOn').disabled = !many;
@@ -681,6 +711,7 @@ $('linkInput').addEventListener('keydown', e => {
 });
 
 $('btnUpload').onclick = () => $('fileInput').click();
+$('textInput').addEventListener('input', saveDraft);
 async function addFiles(list) {
   const bad = [];
   for (const f of list) {
@@ -814,12 +845,14 @@ async function start(action) {
   const pasted = $('textInput').value.trim();
   if (!links.length && !files.length && !pasted) { msg('Paste some text, upload a file, or add at least one link.'); return; }
   let usedFiles = [...files], usedLinks = [...links], pages = '';
+  // where each file came from, so a stopped deck gives back what was added, not a slice of it
+  let from = files.map(f => ({ files: [f] }));
   if (usedLinks.some(isPdfLink)) {
     $('btnSum').disabled = $('btnKeep').disabled = true; msg('Downloading PDF...');
     const rest = [];
     for (const l of usedLinks) {
       const pdf = isPdfLink(l) ? await fetchPdf(l) : null;
-      if (pdf) usedFiles.push(pdf); else rest.push(l);
+      if (pdf) { usedFiles.push(pdf); from.push({ links: [l] }); } else rest.push(l);
     }
     usedLinks = rest; msg('');
     $('btnSum').disabled = $('btnKeep').disabled = false;
@@ -839,17 +872,17 @@ async function start(action) {
   const common = { action, mode, pages, notices: $('noticeInput').value.trim(), folderId: $('folderSel').value || null, cardPal: curCardPal };
   const split = $('splitOn').checked && !$('splitOn').disabled && usedFiles.length > 1;
   const parts = split
-    ? usedFiles.map(f => ({ files: [f], links: [], text: '' }))
-    : [{ files: usedFiles, links: usedLinks, text: pasted }];
+    ? usedFiles.map((f, i) => ({ part: { files: [f], links: [], text: '' }, orig: from[i] }))
+    : [{ part: { files: usedFiles, links: usedLinks, text: pasted }, orig: { files: [...files], links: [...links], text: pasted } }];
   // anything typed or linked alongside the files still deserves its own deck
-  if (split && (pasted || usedLinks.length)) parts.push({ files: [], links: usedLinks, text: pasted });
+  if (split && (pasted || usedLinks.length)) parts.push({ part: { files: [], links: usedLinks, text: pasted }, orig: { links: usedLinks, text: pasted } });
 
-  const made = parts.map(part => {
+  const made = parts.map(({ part, orig }) => {
     const snapshot = Object.assign({}, common, part);
     snapshot.diagrams = extractDiagrams(snapshot);
-    return { id: uuid(), status: 'run', snapshot };
+    return { id: uuid(), status: 'run', snapshot, orig };
   });
-  made.forEach(j => jobs.unshift(j));
+  made.forEach(j => { jobs.unshift(j); holdSources(j, j.orig); });
   links = []; files = []; $('textInput').value = ''; renderChips(); msg('');
   renderAll();
   made.forEach(schedule);
@@ -1541,6 +1574,12 @@ function deckRuntime() {
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const track = document.getElementById('track'), bar = document.getElementById('toolbar');
   let vertical = false, cur = 0, io = null;
+  // Reopen on the card the reader left. Until they touch the deck, keep putting
+  // them back there: fonts, formulas and pictures arrive late and shift the
+  // cards, and a phone shows card 1 for a moment before the jump. Nothing seen
+  // in that time is reported, or it would overwrite the bookmark with card 1.
+  const startAt = Math.min(Math.max((window.__NOTES && window.__NOTES.at) | 0, 0), N - 1);
+  let restoring = true;
   track.innerHTML = cards.map((c, i) =>
     `<article class="insta-card" data-i="${i}"><header class="c-head"><div class="c-top"><span class="badge">${pad(i + 1)}. ${esc(c.badge)}</span><span class="counter">${pad(i + 1)} / ${pad(N)}</span></div><h2 class="c-title">${esc(c.title)}</h2></header><div class="card-body custom-scrollbar">${c.body}</div><footer class="c-foot"><div class="t"><span class="c-dot"></span><span class="n">${esc(D.title)}</span></div><span class="c-label">${esc(c.label || D.label)}</span></footer></article>`
   ).join('');
@@ -1552,15 +1591,28 @@ function deckRuntime() {
     (window.__NOTES ? `<button class="tb sec" id="bNotes"></button>` : '') +
     `<button class="tb sec" id="bFull" title="${esc(UI.fullscreen)} (F)"><i class="fa-solid fa-expand"></i><span class="tx">${esc(UI.fullscreen)}</span><kbd>F</kbd></button>`;
   const dots = [...bar.querySelectorAll('#dots button')];
-  let atTimer = null, atLast = -1;
+  let atLast = startAt;
   const mark = i => {
     cur = i; dots.forEach((d, k) => d.classList.toggle('on', k === i));
-    if (i === atLast) return;
+    if (restoring || i === atLast) return;
     atLast = i;
-    clearTimeout(atTimer);
-    atTimer = setTimeout(() => { try { parent.postMessage({ mc: 'at', i: cur }, '*'); } catch (e) {} }, 400);
+    try { parent.postMessage({ mc: 'at', i }, '*'); } catch (e) {}
   };
-  const goTo = i => { i = (i + N) % N; track.children[i].scrollIntoView({ behavior: 'smooth', inline: 'center', block: vertical ? 'center' : 'nearest' }); mark(i); };
+  // straight to a card with no animation, so no card on the way is passed through
+  const jumpTo = i => {
+    const c = track.children[i]; if (!c) return;
+    if (vertical) { const r = c.getBoundingClientRect(); scrollTo(0, r.top + scrollY - Math.max(0, (innerHeight - r.height) / 2)); }
+    else {
+      const was = track.style.scrollBehavior; track.style.scrollBehavior = 'auto';
+      track.scrollLeft += c.getBoundingClientRect().left - track.getBoundingClientRect().left - (track.clientWidth - c.offsetWidth) / 2;
+      track.style.scrollBehavior = was;
+    }
+    mark(i);
+  };
+  const reJump = () => { if (restoring) jumpTo(startAt); };
+  const settle = () => { if (!restoring) return; reJump(); restoring = false; };
+  ['pointerdown', 'touchstart', 'wheel', 'keydown'].forEach(t => addEventListener(t, settle, { capture: true, passive: true }));
+  const goTo = i => { i = (i + N) % N; if (restoring) return jumpTo(i); track.children[i].scrollIntoView({ behavior: 'smooth', inline: 'center', block: vertical ? 'center' : 'nearest' }); mark(i); };
   const observe = () => {
     if (io) io.disconnect();
     io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) mark(+e.target.dataset.i); }), { root: vertical ? null : track, threshold: .6 });
@@ -1597,7 +1649,7 @@ function deckRuntime() {
     const fit = full || innerWidth < 700;
     if (document.documentElement.classList.contains('fit') !== fit) {
       document.documentElement.classList.toggle('fit', fit);
-      setTimeout(() => goTo(cur), 80);
+      setTimeout(() => restoring ? reJump() : goTo(cur), 80);
     }
   };
   addEventListener('resize', fitUpdate); document.addEventListener('fullscreenchange', fitUpdate); document.addEventListener('webkitfullscreenchange', fitUpdate);
@@ -1709,21 +1761,19 @@ function deckRuntime() {
   applyNotes();
 
   layBtn(); observe();
-  const startAt = Math.min(Math.max((window.__NOTES && window.__NOTES.at) | 0, 0), N - 1);
-  mark(startAt); atLast = startAt;
-  if (startAt > 0) {
-    const was = track.style.scrollBehavior;
-    track.style.scrollBehavior = 'auto';          // jump, never animate through the deck
-    track.children[startAt].scrollIntoView({ inline: 'center', block: 'nearest' });
-    requestAnimationFrame(() => { track.style.scrollBehavior = was; });
-  }
+  jumpTo(startAt);
+  requestAnimationFrame(reJump);
+  [150, 500, 1200, 2500].forEach(ms => setTimeout(reJump, ms));
+  addEventListener('load', reJump);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(reJump);
+  setTimeout(() => { reJump(); restoring = false; }, 4000);
   const math = () => {
     if (!window.renderMathInElement) return;
     try {
       renderMathInElement(track, { delimiters: [{ left: '$$', right: '$$', display: true }, { left: '\\[', right: '\\]', display: true }, { left: '\\(', right: '\\)', display: false }], throwOnError: false });
     } catch (e) {}
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', math); else math();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { math(); reJump(); }); else { math(); reJump(); }
 }
 
 function buildDeckHtml(deck, mode) {
@@ -2034,9 +2084,10 @@ function refreshJobText(j) {
 }
 setInterval(() => jobs.forEach(j => { if (j.status === 'run') refreshJobText(j); }), 1000);
 
-// Nothing a model does should cost someone the files they just attached.
-function restoreInputs(snap) {
-  if (!snap) return;
+// Nothing a model does, and no change of mind, should cost someone the files
+// they just attached.
+function putBack(snap) {
+  if (!snap) return 0;
   let back = 0;
   (snap.files || []).forEach(f => {
     if (files.some(x => x.name === f.name && x.kind === f.kind && (x.data || '').length === (f.data || '').length)) return;
@@ -2044,9 +2095,11 @@ function restoreInputs(snap) {
   });
   (snap.links || []).forEach(l => { if (!links.includes(l)) { links.push(l); back++; } });
   if (snap.text && !$('textInput').value.trim()) { $('textInput').value = snap.text; back++; }
-  if (!back) return;
-  renderChips();
-  msg('That did not work, so your sources are back in the box. Press Retry on the card, or try again here.');
+  return back;
+}
+function restoreInputs(job, why) {
+  if (putBack(job.orig || job.snapshot)) { renderChips(); msg(why); }
+  releaseSources(job);
 }
 
 async function run(job) {
@@ -2105,13 +2158,14 @@ async function run(job) {
       gen: job.used ? { model: job.used.model, t: job.used.timing, total: Date.now() - job.t0 } : null
     };
     await dbPut('items', item);
+    releaseSources(job);
     jobs = jobs.filter(j => j !== job);
     items.unshift(item);
     syncSoon();
   } catch (e) {
     if (job.cancelled || e.cancelled) return;
     job.status = 'err'; job.error = e.message || String(e);
-    restoreInputs(job.snapshot);
+    restoreInputs(job, 'That did not work, so your sources are back in the box. Press Retry on the card, or try again here.');
   }
   renderAll();
 }
@@ -2139,7 +2193,11 @@ function jobTile(j) {
     t.querySelector('.t').textContent = stageText(j);
     t.querySelector('.t2').textContent = phaseLine(phaseTimes(j.ph));
     const cb = document.createElement('button'); cb.className = 'btn'; cb.textContent = 'Cancel';
-    cb.onclick = () => { j.cancelled = true; if (j.abort) j.abort.abort(); jobs = jobs.filter(x => x !== j); renderAll(); };
+    cb.onclick = () => {
+      j.cancelled = true; if (j.abort) j.abort.abort(); jobs = jobs.filter(x => x !== j);
+      restoreInputs(j, 'Stopped. Your sources are back in the box.');
+      renderAll();
+    };
     t.appendChild(cb);
   } else {
     t.className = 'tile error';
@@ -2302,8 +2360,10 @@ document.addEventListener('keydown', e => {
 });
 $('vTab').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
-  const esc = it.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-  const wrap = '<!DOCTYPE html><meta charset="utf-8"><title>' + it.title.replace(/[<>&]/g, '') + '</title><body style="margin:0;background:#232323"><iframe sandbox="allow-scripts" allow="fullscreen" style="position:fixed;inset:0;width:100%;height:100%;border:0" srcdoc="' + esc + '"></iframe><script>addEventListener("keydown",function(e){if(e.key.toLowerCase()==="f"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){var f=document.querySelector("iframe");document.fullscreenElement?document.exitFullscreen():f.requestFullscreen()}})<\/script>';
+  const esc = withNotes(it.html, it.notes, notesOn(), false, posOf(it.id)).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  // the tab shares this page's origin, so it can keep the bookmark itself
+  const keep = 'addEventListener("message",function(e){var m=e.data,f=document.querySelector("iframe");if(f&&e.source===f.contentWindow&&m&&m.mc==="at"&&m.i>=0&&m.i<2000)try{localStorage.setItem(' + JSON.stringify('pos:' + it.id) + ',String(m.i|0))}catch(x){}});';
+  const wrap = '<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + it.title.replace(/[<>&]/g, '') + '</title><body style="margin:0;background:#232323"><iframe sandbox="allow-scripts" allow="fullscreen" style="position:fixed;inset:0;width:100%;height:100%;border:0" srcdoc="' + esc + '"></iframe><script>' + keep + 'addEventListener("keydown",function(e){if(e.key.toLowerCase()==="f"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){var f=document.querySelector("iframe");document.fullscreenElement?document.exitFullscreen():f.requestFullscreen()}})<\/script>';
   const blobUrl = () => { const u = URL.createObjectURL(new Blob([wrap], { type: 'text/html' })); setTimeout(() => URL.revokeObjectURL(u), 120000); return u; };
   const w = window.open('', '_blank');
   if (!w) { msg('Your browser blocked the new window. Allow pop-ups for this site and try again.'); $('viewer').close(); return; }
@@ -2744,6 +2804,7 @@ $('btnSaveSettings').onclick = () => {
 };
 
 // ---------- Init ----------
+loadDraft();
 Promise.all([dbAll('items'), dbAll('folders')]).then(([i, f]) => { items = i; folders = f; renderAll(); }).catch(() => { renderAll(); msg('Could not open the browser history storage.'); });
 renderSync();
 if (!store.get('gk')) msg('Start by entering your Gemini API key in Settings.');
