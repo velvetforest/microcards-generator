@@ -163,8 +163,11 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 .hint a{color:var(--deep)}
 #viewer{width:min(900px,96vw);height:92vh;padding:0;display:none;flex-direction:column}
 #viewer[open]{display:flex}
-#viewer .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
-#viewer .bar b{flex:1;font-size:14px;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#viewer .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
+#viewer .bar b{flex:1 1 160px;min-width:0;font-size:14px;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#viewer .vlook{display:flex;gap:10px;align-items:center}
+#viewer .vlook .cpal{flex-wrap:nowrap}
+#viewer .vlook .cpal button{width:20px;height:20px;border-radius:6px}
 #viewer iframe{flex:1;border:0;width:100%}
 #viewer.pfull{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;inset:0}
 #viewer.pfull .bar{display:none}
@@ -303,6 +306,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 <dialog id="viewer">
   <div class="bar">
     <b id="vTitle"></b>
+    <span class="vlook"><button class="switch" id="vMode" role="switch" aria-checked="false" title="Light / dark cards"><span class="knob"><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></button><span class="cpal" id="vPal"></span></span>
     <button class="btn" id="vFull" title="Fullscreen (press F)">Fullscreen <kbd>F</kbd></button>
     <button class="btn" id="vTab" title="Open in a new window">New window</button>
     <button class="btn" id="vRename">Rename</button>
@@ -611,14 +615,50 @@ function cardPaletteCss(id) {
   };
   return `<style id="card-palette">html:root[data-theme="light"]{${block(false)}}html:root[data-theme="dark"]{${block(true)}}</style>`;
 }
-// A deck's html is written once, so notes ride in just ahead of its runtime.
+// Runs inside a deck once its cards are built. A picture cut from the source
+// only sits safely in a frame when it is the frame's one child; wrapped in
+// something else, or put in a short fixed-height frame, it kept its own
+// height and spilled over the text below. A picture alone in its frame now
+// becomes that frame's only child, and any other frame grows to fit it.
+function figFit() {
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.card-body .fig-img').forEach(function (img) {
+      var frame = img.closest('.illus-fill, .illus');
+      if (frame) {
+        var alone = frame.querySelectorAll('.fig-img').length === 1 && !frame.textContent.trim() && !frame.querySelector('svg, table, canvas, [data-graph-ref]');
+        if (alone) { frame.className = 'illus-fill'; frame.removeAttribute('style'); frame.replaceChildren(img); return; }
+        frame.classList.add('fig-grow');
+      }
+      for (var a = img.parentElement; a && !a.classList.contains('card-body'); a = a.parentElement) {
+        [].slice.call(a.classList).forEach(function (c) { if (/^(max-)?h-|^overflow-(hidden|clip)$/.test(c)) a.classList.remove(c); });
+        a.style.height = ''; a.style.maxHeight = ''; a.style.overflow = '';
+      }
+    });
+  });
+}
+const FIG_FIT = '<style>.illus-fill{position:relative}.illus-fill>.fig-img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain;background:transparent}' +
+  '.fig-grow{height:auto!important;flex:none!important;min-height:0!important}' +
+  '.fig-grow .fig-img{position:static!important;width:100%!important;height:auto!important}</style>' +
+  '<scr' + 'ipt>(' + figFit + ')();<\/scr' + 'ipt>';
+
+// A deck's html is written once, so notes ride in just ahead of its runtime,
+// along with fixes for decks made before them.
 function withNotes(html, notes, on, editable, at) {
   if (!/window\.__DECK=/.test(html)) return html;
   const payload = JSON.stringify({ map: notes || {}, on: on !== false, editable: !!editable, label: 'Notes', at: at > 0 ? at : 0 }).replace(/</g, '\\u003c');
-  return html.replace('<script>window.__DECK=', '<scr' + 'ipt>window.__NOTES=' + payload + ';<\/scr' + 'ipt><scr' + 'ipt>window.__DECK=');
+  return html.replace('<script>window.__DECK=', FIG_FIT + '<scr' + 'ipt>window.__NOTES=' + payload + ';<\/scr' + 'ipt><scr' + 'ipt>window.__DECK=');
 }
 const notesOn = () => store.get('notesOn', '1') === '1';
 const posOf = id => +store.get('pos:' + id, '0') || 0;
+
+// A deck keeps the html it was made with; its light/dark mode and card colours
+// are laid over it whenever it is shown, so both can change at any time.
+function themed(html, it) {
+  if (it.mode === 'light' || it.mode === 'dark') html = html.replace(/(<html\b[^>]*\bdata-theme=")(light|dark)"/i, '$1' + it.mode + '"');
+  if (it.pal) html = applyCardPalette(html.replace(/<style id="card-palette">[\s\S]*?<\/style>/g, ''), it.pal);
+  return html;
+}
+const deckHtml = it => themed(it.html, it);
 
 function applyCardPalette(html, id) {
   const css = cardPaletteCss(id);
@@ -2154,7 +2194,7 @@ async function run(job) {
     }
     const item = {
       id: job.id, created: Date.now(), updated: Date.now(), html, folderId: fid, title,
-      mode: job.snapshot.mode, action: job.snapshot.action, warn,
+      mode: job.snapshot.mode, pal: job.snapshot.cardPal, action: job.snapshot.action, warn,
       gen: job.used ? { model: job.used.model, t: job.used.timing, total: Date.now() - job.t0 } : null
     };
     await dbPut('items', item);
@@ -2250,7 +2290,7 @@ function renderGrid() {
   list.forEach(it => {
     const t = document.createElement('div'); t.className = 'tile';
     const f = document.createElement('iframe');
-    f.setAttribute('sandbox', 'allow-scripts'); f.loading = 'lazy'; f.srcdoc = it.html; f.tabIndex = -1;
+    f.setAttribute('sandbox', 'allow-scripts'); f.loading = 'lazy'; f.srcdoc = deckHtml(it); f.tabIndex = -1;
     const info = document.createElement('div'); info.className = 'info';
     info.innerHTML = '<b></b><small></small>';
     info.firstChild.textContent = it.title;
@@ -2304,11 +2344,31 @@ async function removeItem(id) {
   renderAll(); syncSoon();
 }
 
+const showDeck = it => { $('vFrame').srcdoc = withNotes(deckHtml(it), it.notes, notesOn(), true, posOf(it.id)); };
+function markLook(it) {
+  $('vMode').setAttribute('aria-checked', it.mode === 'dark');
+  document.querySelectorAll('#vPal button').forEach(b => b.classList.toggle('on', b.dataset.id === it.pal));
+}
+async function changeLook(ch) {
+  const it = items.find(i => i.id === openId); if (!it) return;
+  Object.assign(it, ch, { updated: Date.now() });
+  markLook(it); showDeck(it);                    // reopens on the same card
+  await dbPut('items', it); renderAll(); syncSoon();
+}
+$('vMode').onclick = () => { const it = items.find(i => i.id === openId); if (it) changeLook({ mode: it.mode === 'dark' ? 'light' : 'dark' }); };
+PAL.forEach(p => {
+  const b = document.createElement('button');
+  b.dataset.id = p.id; b.title = p.name + ' cards'; b.setAttribute('aria-label', p.name + ' cards'); b.style.background = p.sw;
+  b.onclick = () => changeLook({ pal: p.id });
+  $('vPal').appendChild(b);
+});
+
 function openItem(id) {
   const it = items.find(i => i.id === id); if (!it) return;
   openId = id;
   $('vTitle').textContent = it.title;
-  $('vFrame').srcdoc = withNotes(it.html, it.notes, notesOn(), true, posOf(id));
+  showDeck(it);
+  markLook(it);
   const m = $('vMove'); m.innerHTML = '';
   folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = 'Folder: ' + f.name; m.appendChild(o); });
   m.value = it.folderId;
@@ -2360,7 +2420,7 @@ document.addEventListener('keydown', e => {
 });
 $('vTab').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
-  const esc = withNotes(it.html, it.notes, notesOn(), false, posOf(it.id)).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const esc = withNotes(deckHtml(it), it.notes, notesOn(), false, posOf(it.id)).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   // the tab shares this page's origin, so it can keep the bookmark itself
   const keep = 'addEventListener("message",function(e){var m=e.data,f=document.querySelector("iframe");if(f&&e.source===f.contentWindow&&m&&m.mc==="at"&&m.i>=0&&m.i<2000)try{localStorage.setItem(' + JSON.stringify('pos:' + it.id) + ',String(m.i|0))}catch(x){}});';
   const wrap = '<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + it.title.replace(/[<>&]/g, '') + '</title><body style="margin:0;background:#232323"><iframe sandbox="allow-scripts" allow="fullscreen" style="position:fixed;inset:0;width:100%;height:100%;border:0" srcdoc="' + esc + '"></iframe><script>' + keep + 'addEventListener("keydown",function(e){if(e.key.toLowerCase()==="f"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){var f=document.querySelector("iframe");document.fullscreenElement?document.exitFullscreen():f.requestFullscreen()}})<\/script>';
@@ -2377,7 +2437,7 @@ $('vDelete').onclick = () => openId && removeItem(openId);
 $('vDownload').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([withNotes(it.html, it.notes, true, false)], { type: 'text/html' }));
+  a.href = URL.createObjectURL(new Blob([withNotes(deckHtml(it), it.notes, true, false)], { type: 'text/html' }));
   a.download = it.title.replace(/[\\/:*?"<>|]+/g, '').trim().replace(/\s+/g, '-') + '.html';
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
