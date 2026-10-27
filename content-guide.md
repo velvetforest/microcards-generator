@@ -84,6 +84,8 @@ title: ...
 |---|---|
 | `illus` | Khung khối minh hoạ cao cố định (chứa một `<svg viewBox=... class="w-full h-full">`). `illus tall` cao hơn một chút. |
 | `illus-fill` | Khung minh hoạ chiếm hết phần còn lại của card (dùng cho card hình lớn, xem mục 5). |
+
+Khung `illus`, `illus-fill` và SVG chỉ chứa hình vẽ. Không đặt đoạn văn, danh sách, bảng hay code vào trong khung hoặc trong SVG (kể cả `<foreignObject>`), và không dùng `absolute`/`fixed` để đè chữ lên hình: code luôn là `<pre><code>` đứng riêng, chữ luôn nằm ngoài khung, ngay trước hoặc sau hình.
 | `sec-title` | Tiêu đề phần (`<h3 class="sec-title">`). |
 | `bul` | Danh sách (`<ul class="bul"><li>...</li></ul>`). |
 | `cell` | Ô con có nền trắng/viền, dùng trong HTML hoặc bảng mini. |

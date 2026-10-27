@@ -433,6 +433,8 @@ title: ...
 |---|---|
 | `illus` | Khung khối minh hoạ cao cố định (chứa một `<svg viewBox=... class="w-full h-full">`). `illus tall` cao hơn một chút. |
 | `illus-fill` | Khung minh hoạ chiếm hết phần còn lại của card (dùng cho card hình lớn, xem mục 5). |
+
+Khung `illus`, `illus-fill` và SVG chỉ chứa hình vẽ. Không đặt đoạn văn, danh sách, bảng hay code vào trong khung hoặc trong SVG (kể cả `<foreignObject>`), và không dùng `absolute`/`fixed` để đè chữ lên hình: code luôn là `<pre><code>` đứng riêng, chữ luôn nằm ngoài khung, ngay trước hoặc sau hình.
 | `sec-title` | Tiêu đề phần (`<h3 class="sec-title">`). |
 | `bul` | Danh sách (`<ul class="bul"><li>...</li></ul>`). |
 | `cell` | Ô con có nền trắng/viền, dùng trong HTML hoặc bảng mini. |
@@ -642,13 +644,18 @@ function cardPaletteCss(id) {
   };
   return `<style id="card-palette">html:root[data-theme="light"]{${block(false)}}html:root[data-theme="dark"]{${block(true)}}</style>`;
 }
-// Runs inside a deck once its cards are built. A picture cut from the source
-// only sits safely in a frame when it is the frame's one child; wrapped in
-// something else, or put in a short fixed-height frame, it kept its own
-// height and spilled over the text below. A picture alone in its frame now
-// becomes that frame's only child, and any other frame grows to fit it.
+// Runs inside a deck once its cards are built. Nothing in a card may spill
+// over the content after it:
+// - a picture cut from the source sits safely in a frame only as the frame's
+//   one child, so a picture alone in its frame becomes exactly that, and any
+//   other frame holding a picture grows to fit it;
+// - a block of text or code pinned over a drawing goes back into the flow;
+// - anything whose content is taller than the box it was given (a short fixed
+//   frame, a fixed-height box) grows to fit, and the card scrolls instead.
+// It runs again as fonts, formulas and styles arrive, since each can change
+// the heights.
 function figFit() {
-  document.addEventListener('DOMContentLoaded', function () {
+  function frames() {
     document.querySelectorAll('.card-body .fig-img').forEach(function (img) {
       var frame = img.closest('.illus-fill, .illus');
       if (frame) {
@@ -661,11 +668,41 @@ function figFit() {
         a.style.height = ''; a.style.maxHeight = ''; a.style.overflow = '';
       }
     });
+  }
+  var BLOCK = 'pre,table,ul,ol,p,blockquote';
+  function unspill() {
+    document.querySelectorAll('.card-body').forEach(function (body) {
+      var all = [].slice.call(body.querySelectorAll('*')).filter(function (el) { return !el.closest('svg') && !el.classList.contains('fig-img'); });
+      all.forEach(function (el) {
+        var pos = getComputedStyle(el).position;
+        if ((pos === 'absolute' || pos === 'fixed') && (el.matches(BLOCK) || el.querySelector(BLOCK))) el.style.setProperty('position', 'static', 'important');
+      });
+      for (var pass = 0; pass < 2; pass++) all.forEach(function (el) {
+        if (!el.clientHeight || el.scrollHeight <= el.clientHeight + 4) return;
+        if (getComputedStyle(el).overflowY !== 'visible') return;
+        ['height', 'max-height'].forEach(function (k) { el.style.setProperty(k, k === 'height' ? 'auto' : 'none', 'important'); });
+        el.style.setProperty('flex', 'none', 'important');
+        [].forEach.call(el.children, function (c) { if (c.classList.contains('fig-img')) c.classList.add('fig-flow'); });
+        // a drawing told to fill the box would keep the box its own height; it takes its own proportions instead
+        [].forEach.call(el.querySelectorAll(':scope > svg, :scope > * > svg'), function (g) { g.style.setProperty('height', 'auto', 'important'); });
+      });
+    });
+  }
+  var t = null;
+  function later() { clearTimeout(t); t = setTimeout(unspill, 120); }
+  document.addEventListener('DOMContentLoaded', function () {
+    frames(); unspill();
+    [600, 1500, 3000].forEach(function (ms) { setTimeout(unspill, ms); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(later);
   });
+  addEventListener('load', later);
+  addEventListener('resize', later);
 }
 const FIG_FIT = '<style>.illus-fill{position:relative}.illus-fill>.fig-img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain;background:transparent}' +
   '.fig-grow{height:auto!important;flex:none!important;min-height:0!important}' +
-  '.fig-grow .fig-img{position:static!important;width:100%!important;height:auto!important}</style>' +
+  '.fig-grow .fig-img,.fig-flow{position:static!important;width:100%!important;height:auto!important}' +
+  // only the big picture frame gives way when a card is full; the rest keep their height and the card scrolls
+  '.card-body>*:not(.illus-fill){flex-shrink:0}</style>' +
   '<scr' + 'ipt>(' + figFit + ')();<\/scr' + 'ipt>';
 
 // A deck's html is written once, so notes ride in just ahead of its runtime,
