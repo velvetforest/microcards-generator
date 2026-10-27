@@ -138,7 +138,7 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 
   - `data-src`: số thứ tự tệp trong danh sách "TỆP ĐÍNH KÈM" ở đầu yêu cầu (bắt đầu từ 1).
   - `data-page`: số thứ tự trang trong tệp đính kèm (trang đầu của tệp = 1, KHÔNG phải số in trên trang giấy).
-  - `data-box`: khung bao hình gồm bốn số `ymin,xmin,ymax,xmax`, mỗi số từ 0 đến 1000 theo chiều cao/rộng của trang. Khung phải ôm trọn hình (kể cả nhãn trục, chú giải, chữ bên trong hình) nhưng KHÔNG gồm chú thích dưới hình (chép chú thích riêng bằng chữ trong `<p class="cap">`).
+  - `data-box`: khung bao hình gồm bốn số `ymin,xmin,ymax,xmax`, mỗi số từ 0 đến 1000 theo chiều cao/rộng của trang. **Thà khung rộng hơn hình một chút ở mọi phía còn hơn để hụt**: ứng dụng tự tìm mép thật của hình và cắt sát lại, bỏ đi chữ thừa xung quanh, nhưng không lấy lại được phần hình đã bị khung cắt mất. Khung phải ôm trọn hình (kể cả nhãn trục, chú giải, chữ bên trong hình) nhưng KHÔNG gồm chú thích dưới hình (chép chú thích riêng bằng chữ trong `<p class="cap">`).
   - Mỗi hình một card (hoặc nhiều hình nhỏ liền kề trong một card, mỗi hình một thẻ `fig`).
   - Chỉ khi không có tệp đính kèm (chỉ có link hoặc văn bản) mới vẽ lại bằng SVG/graph như các quy tắc trên.
 - Không thể dựng lại trung thực một hình (ảnh mờ, thiếu thông tin): nói rõ trong card phần nào không đọc được, tuyệt đối không bịa.

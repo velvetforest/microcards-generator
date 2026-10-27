@@ -977,7 +977,7 @@ html:has(.track.v){scroll-snap-type:y proximity}
 .cell{background:var(--surface-solid);border:1px solid var(--border);border-radius:4px}
 .glow{filter:var(--glow-svg)}
 .illus-fill{position:relative}
-.illus-fill>.fig-img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain;background:#fff;border-radius:4px}
+.illus-fill>.fig-img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain;background:transparent}
 .fig-img{display:block;max-width:100%;height:auto;background:#fff;border-radius:6px}
 .cap{margin:0;font-size:11px;line-height:1.35;color:var(--text-muted);font-style:italic}
 .card-body table{width:100%;border-collapse:collapse;font-size:11px}
@@ -1078,36 +1078,145 @@ async function getPdfDoc(f) {
   return pdfDocCache.get(k);
 }
 
+// The model's box is only a hint: it estimates a figure's position from a
+// picture of the page and is often a few percent off, which cut figures in
+// half. The real edges are found in the rendered pixels instead: split the page
+// into blocks of ink separated by blank gaps and keep the blocks the hint points
+// at. Text above or below a figure is a separate block, so it falls away; a part
+// of the figure the hint missed is in the same block, so it comes back.
 function parseBox(str) {
   let v = String(str || '').split(/[\s,]+/).filter(Boolean).map(Number);
-  if (v.length !== 4 || v.some(isNaN)) return [0, 0, 1000, 1000];
+  if (v.length !== 4 || v.some(isNaN)) return null;
   if (Math.max(...v) <= 1.5) v = v.map(n => n * 1000);
-  const pad = 15;
-  const y0 = Math.max(0, v[0] - pad), x0 = Math.max(0, v[1] - pad), y1 = Math.min(1000, v[2] + pad), x1 = Math.min(1000, v[3] + pad);
-  return (y1 <= y0 || x1 <= x0) ? [0, 0, 1000, 1000] : [y0, x0, y1, x1];
+  v = v.map(n => Math.min(1000, Math.max(0, n)));
+  return (v[2] <= v[0] || v[3] <= v[1]) ? null : v;
+}
+
+// Ink mask of the page on a coarse grid. A cell is ink when any pixel in it is
+// clearly darker than the paper, so hairlines survive the shrinking; the paper
+// tone is read from the page itself, so grey scans and phone photos work too.
+function inkGrid(cv) {
+  const W = cv.width, H = cv.height;
+  const step = Math.max(1, Math.ceil(Math.max(W, H) / 700));
+  const gw = Math.ceil(W / step), gh = Math.ceil(H / step);
+  const data = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+  const lum = i => data[i + 3] < 20 ? 255 : (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < data.length; i += 4) hist[lum(i)]++;
+  let paper = 255;
+  for (let l = 255, acc = 0; l >= 0; l--) if ((acc += hist[l]) > W * H * 0.3) { paper = l; break; }
+  const thr = paper - 20, ink = new Uint8Array(gw * gh);
+  for (let y = 0; y < H; y++) {
+    const r = ((y / step) | 0) * gw;
+    for (let x = 0; x < W; x++) if (lum((y * W + x) * 4) < thr) ink[r + ((x / step) | 0)] = 1;
+  }
+  return { ink, gw, gh, step };
+}
+
+// Blocks of ink: cells joined when the blank between them is narrower than
+// rx/ry cells. Text lines merge into one paragraph block and a drawing into one
+// figure block, while the wider gap between a figure and its text keeps them
+// apart. Returns each block's box in cells, from its real ink, not the padding.
+function inkBlocks(g, rx, ry) {
+  const { ink, gw, gh } = g, n = gw * gh;
+  const wide = new Uint8Array(n), dil = new Uint8Array(n);
+  for (let y = 0; y < gh; y++) {                     // spread ink sideways
+    const r = y * gw; let last = -1e9;
+    for (let x = 0; x < gw; x++) { if (ink[r + x]) last = x; if (x - last <= rx) wide[r + x] = 1; }
+    last = 1e9;
+    for (let x = gw - 1; x >= 0; x--) { if (ink[r + x]) last = x; if (last - x <= rx) wide[r + x] = 1; }
+  }
+  for (let x = 0; x < gw; x++) {                     // then up and down
+    let last = -1e9;
+    for (let y = 0; y < gh; y++) { if (wide[y * gw + x]) last = y; if (y - last <= ry) dil[y * gw + x] = 1; }
+    last = 1e9;
+    for (let y = gh - 1; y >= 0; y--) { if (wide[y * gw + x]) last = y; if (last - y <= ry) dil[y * gw + x] = 1; }
+  }
+  const lab = new Int32Array(n).fill(-1), blocks = [], queue = new Int32Array(n);
+  for (let s = 0; s < n; s++) {
+    if (!dil[s] || lab[s] >= 0) continue;
+    const id = blocks.length, bx = [1e9, 1e9, -1, -1];  // y0, x0, y1, x1
+    let qh = 0, qt = 0; queue[qt++] = s; lab[s] = id;
+    while (qh < qt) {
+      const c = queue[qh++], y = (c / gw) | 0, x = c - y * gw;
+      if (ink[c]) { if (y < bx[0]) bx[0] = y; if (x < bx[1]) bx[1] = x; if (y + 1 > bx[2]) bx[2] = y + 1; if (x + 1 > bx[3]) bx[3] = x + 1; }
+      if (x > 0 && dil[c - 1] && lab[c - 1] < 0) { lab[c - 1] = id; queue[qt++] = c - 1; }
+      if (x < gw - 1 && dil[c + 1] && lab[c + 1] < 0) { lab[c + 1] = id; queue[qt++] = c + 1; }
+      if (y > 0 && dil[c - gw] && lab[c - gw] < 0) { lab[c - gw] = id; queue[qt++] = c - gw; }
+      if (y < gh - 1 && dil[c + gw] && lab[c + gw] < 0) { lab[c + gw] = id; queue[qt++] = c + gw; }
+    }
+    if (bx[2] > 0) blocks.push(bx);
+  }
+  return blocks;
+}
+
+function snapBox(cv, core) {                       // core and result: [y0, x0, y1, x1] in pixels
+  const W = cv.width, H = cv.height;
+  const clampBox = b => [Math.max(0, b[0]), Math.max(0, b[1]), Math.min(H, b[2]), Math.min(W, b[3])].map(Math.round);
+  const loose = () => clampBox([core[0] - H * 0.025, core[1] - W * 0.025, core[2] + H * 0.025, core[3] + W * 0.025]);
+  const g = inkGrid(cv), st = g.step;
+  const hint = core.map(v => v / st);
+  const area = b => Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
+  const meet = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+
+  let dense = 0;                                   // a scan or a full-bleed photo: nothing to snap to
+  const hy0 = Math.floor(hint[0]), hy1 = Math.ceil(hint[2]), hx0 = Math.floor(hint[1]), hx1 = Math.ceil(hint[3]);
+  for (let y = Math.max(0, hy0); y < Math.min(g.gh, hy1); y++) for (let x = Math.max(0, hx0); x < Math.min(g.gw, hx1); x++) dense += g.ink[y * g.gw + x];
+  if (dense > area(hint) * 0.55) return loose();
+
+  const blocks = inkBlocks(g, Math.max(2, Math.round(W * 0.0125 / st)), Math.max(2, Math.round(H * 0.007 / st)));
+  // the block the hint covers the most of; a frame around the whole page is not a figure
+  let main = null, best = 0;
+  for (const b of blocks) {
+    const o = area(meet(b, hint));
+    if (o > best && area(b) <= Math.max(area(hint) * 4, 1) && area(b) < g.gw * g.gh * 0.7) { best = o; main = b; }
+  }
+  if (!main) return loose();
+  const box = main.slice();
+  for (const b of blocks) {
+    if (b === main) continue;
+    const cover = area(meet(b, hint)) / Math.max(1, area(b));
+    const rowsShared = Math.min(b[2], main[2]) - Math.max(b[0], main[0]);
+    const beside = rowsShared >= Math.min(b[2] - b[0], main[2] - main[0]) * 0.6;
+    // a panel next to the main one, or anything the hint takes in nearly whole
+    if ((beside && cover >= 0.25) || cover >= 0.85) {
+      box[0] = Math.min(box[0], b[0]); box[1] = Math.min(box[1], b[1]); box[2] = Math.max(box[2], b[2]); box[3] = Math.max(box[3], b[3]);
+    }
+  }
+  // never wander far from the hint, in case a figure runs into body text
+  const ey = Math.max(g.gh * 0.15, (hint[2] - hint[0]) * 0.5), ex = Math.max(g.gw * 0.15, (hint[3] - hint[1]) * 0.5);
+  const snapped = meet(box, [hint[0] - ey, hint[1] - ex, hint[2] + ey, hint[3] + ex]);
+
+  const pad = Math.round(Math.min(W, H) * 0.012);
+  const out = clampBox([snapped[0] * st - pad, snapped[1] * st - pad, snapped[2] * st + pad, snapped[3] * st + pad]);
+  return area(out) < area(core) * 0.2 ? loose() : out;   // snapped onto a stray mark: trust the hint
 }
 
 async function cropFigure(f, pageNo, boxStr) {
-  const [y0, x0, y1, x1] = parseBox(boxStr);
-  let src, W, H;
+  const nb = parseBox(boxStr);
+  let cv;
   if (f.mime.startsWith('image/')) {
     const img = new Image(); img.src = 'data:' + f.mime + ';base64,' + f.data; await img.decode();
-    src = img; W = img.naturalWidth; H = img.naturalHeight;
+    cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height); c.drawImage(img, 0, 0);
   } else {
     const pdf = await getPdfDoc(f);
     const page = await pdf.getPage(Math.min(Math.max(pageNo || 1, 1), pdf.numPages));
     const base = page.getViewport({ scale: 1 });
-    const scale = Math.max(1.5, Math.min(4, 1500 / Math.max(base.width * (x1 - x0) / 1000, 1)));
+    const wide = nb ? Math.min(1000, nb[3] - nb[1] + 280) : 1000;   // room for what the hint missed
+    const scale = Math.max(1.5, Math.min(3.5, 1600 / Math.max(base.width * wide / 1000, 1)));
     const vp = page.getViewport({ scale });
-    const cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
-    await page.render({ canvasContext: cv.getContext('2d'), viewport: vp, intent: 'print' }).promise;
-    src = cv; W = cv.width; H = cv.height;
+    cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+    const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
+    await page.render({ canvasContext: c, viewport: vp, intent: 'print' }).promise;
   }
-  const sx = Math.round(x0 / 1000 * W), sy = Math.round(y0 / 1000 * H);
-  const sw = Math.max(1, Math.round((x1 - x0) / 1000 * W)), sh = Math.max(1, Math.round((y1 - y0) / 1000 * H));
-  const out = document.createElement('canvas'); out.width = sw; out.height = sh;
-  const ctx = out.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, sw, sh);
-  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+  const W = cv.width, H = cv.height;
+  const box = nb ? snapBox(cv, [nb[0] / 1000 * H, nb[1] / 1000 * W, nb[2] / 1000 * H, nb[3] / 1000 * W]) : [0, 0, H, W];
+  let sw = Math.max(1, box[3] - box[1]), sh = Math.max(1, box[2] - box[0]);
+  const k = Math.min(1, 1800 / Math.max(sw, sh));          // keep a deck light
+  const out = document.createElement('canvas'); out.width = Math.round(sw * k); out.height = Math.round(sh * k);
+  const ctx = out.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(cv, box[1], box[0], sw, sh, 0, 0, out.width, out.height);
   return out.toDataURL('image/png');
 }
 
