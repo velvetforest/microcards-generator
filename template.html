@@ -161,6 +161,12 @@ label{display:block;font-size:12px;font-weight:700;color:var(--deep);margin:14px
 textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
 .hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
 .hint a{color:var(--deep)}
+#btnLock svg{flex:none}
+#btnLock.on{background:var(--soft);color:var(--deep);border-color:var(--accent);box-shadow:var(--glow)}
+#btnLock.on #lockTxt{font-variant-numeric:tabular-nums}
+.lockopts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.lockopts .btn{justify-content:center;height:44px}
+#lockGate{width:min(420px,92vw);text-align:left}
 #viewer{width:min(900px,96vw);height:92vh;padding:0;display:none;flex-direction:column}
 #viewer[open]{display:flex}
 #viewer .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
@@ -189,7 +195,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <h1><span class="p">Micro</span> <span class="g">Cards</span></h1>
   <div class="hdr">
     <div class="palrow" id="palList" role="group" aria-label="Theme color"></div>
-    <button class="switch" id="themeSw" role="switch" aria-checked="false" title="Toggle dark mode"><span class="knob"><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></button><button class="btn themebtn sync-btn" id="btnSync" title="Sync devices">Sync devices<span class="sdot" id="syncDot"></span></button><button class="btn themebtn" id="btnSec" title="Where your data lives">Data security</button>
+    <button class="switch" id="themeSw" role="switch" aria-checked="false" title="Toggle dark mode"><span class="knob"><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></button><button class="btn themebtn" id="btnLock" title="Lock in to focus"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span id="lockTxt">Lock in</span></button><button class="btn themebtn sync-btn" id="btnSync" title="Sync devices">Sync devices<span class="sdot" id="syncDot"></span></button><button class="btn themebtn" id="btnSec" title="Where your data lives">Data security</button>
     <button class="btn gear" id="btnSettings" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
 </header>
 
@@ -301,6 +307,26 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <h3>Data security</h3>
   <div id="secBody"></div>
   <div class="row" style="margin-top:18px"><span class="spacer"></span><button class="btn" id="secClose">Close</button></div>
+</dialog>
+
+<dialog id="lockDlg">
+  <h3>Lock in</h3>
+  <p style="margin:0 0 14px">For focus, you will not be able to escape this site. Lock in for?</p>
+  <div class="lockopts">
+    <button class="btn" data-min="0">Until I turn it off</button>
+    <button class="btn" data-min="25">25 minutes</button>
+    <button class="btn" data-min="40">40 minutes</button>
+    <button class="btn" data-min="60">60 minutes</button>
+    <button class="btn" data-min="90">90 minutes</button>
+  </div>
+  <p class="hint" id="lockNote" style="margin:14px 0 0"></p>
+  <div class="row" style="margin-top:16px"><span class="spacer"></span><button class="btn" id="lockCancel">Cancel</button></div>
+</dialog>
+
+<dialog id="lockGate">
+  <h3>Still locked in</h3>
+  <p style="margin:0 0 4px">You left full screen. <b id="lockGateTime"></b></p>
+  <div class="row" style="margin-top:16px"><span class="spacer"></span><button class="btn primary" id="lockBack">Back to focus</button></div>
 </dialog>
 
 <dialog id="viewer">
@@ -2245,13 +2271,16 @@ $('vMove').onchange = async e => {
   it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll(); syncSoon();
 };
 const nativeFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+// Lock in keeps the whole page full screen; the viewer's full screen sits on
+// top of that one and steps back down to it.
+const fsTop = () => { const f = document.fullscreenElement || document.webkitFullscreenElement; return f && f !== document.documentElement ? f : null; };
 function enterViewerFull() {
-  if (document.fullscreenElement || document.webkitFullscreenElement) return;
+  if (fsTop()) return;
   if (nativeFs) { const f = $('vFrame'), pr = (f.requestFullscreen || f.webkitRequestFullscreen).call(f); if (pr && pr.catch) pr.catch(() => {}); }
   else $('viewer').classList.add('pfull');
 }
 function toggleViewerFull() {
-  if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  if (fsTop()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
   if (nativeFs) { const f = $('vFrame'); (f.requestFullscreen || f.webkitRequestFullscreen).call(f); }
   else $('viewer').classList.toggle('pfull');
 }
@@ -2264,6 +2293,7 @@ document.addEventListener('keydown', e => {
 });
 $('vTab').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
+  if (lockOn()) { alert('Locked in: card sets open here until the time is up.'); return; }
   const esc = withNotes(deckHtml(it), it.notes, notesOn(), false, posOf(it.id)).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   // the tab shares this page's origin, so it can keep the bookmark itself
   const keep = 'addEventListener("message",function(e){var m=e.data,f=document.querySelector("iframe");if(f&&e.source===f.contentWindow&&m&&m.mc==="at"&&m.i>=0&&m.i<2000)try{localStorage.setItem(' + JSON.stringify('pos:' + it.id) + ',String(m.i|0))}catch(x){}});';
@@ -2541,6 +2571,71 @@ async function useCode(code) {
   syncErr = ''; renderSync();
   await syncNow();
 }
+
+// ---------- Lock in ----------
+// A web page cannot truly stop anyone leaving it. What it can do: fill the
+// screen so tabs and the address bar are gone, ask the browser to hand it the
+// keys that would leave (Chrome and Edge; Esc must then be held to get out),
+// and make the browser ask "Leave site?" before the tab closes. Lock in does
+// all of that for the chosen time, and asks to come back if full screen ends.
+const canFull = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+const canKeys = !!(navigator.keyboard && navigator.keyboard.lock);
+const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+const lockUntil = () => +store.get('lockUntil', '0') || 0;      // -1: until turned off
+const lockOn = () => { const u = lockUntil(); return u === -1 || u > Date.now(); };
+const mmss = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+function lockScreen() {
+  const keys = () => { if (canKeys) navigator.keyboard.lock().catch(() => {}); };
+  if (!canFull || isFull()) { keys(); return; }
+  const de = document.documentElement, pr = (de.requestFullscreen || de.webkitRequestFullscreen).call(de, { navigationUI: 'hide' });
+  if (pr && pr.then) pr.then(keys, () => {}); else keys();
+}
+function releaseLock(note) {
+  store.set('lockUntil', '0');
+  if (canKeys) navigator.keyboard.unlock();
+  lockTick();
+  if (note) msg(note);
+}
+function lockTick() {
+  const u = lockUntil();
+  if (u > 0 && u <= Date.now()) return releaseLock('Lock-in finished. Nice focus.');
+  const on = lockOn();
+  $('btnLock').classList.toggle('on', on);
+  $('lockTxt').textContent = !on ? 'Lock in' : u === -1 ? 'Locked in' : mmss(u - Date.now());
+  $('btnLock').title = !on ? 'Lock in to focus' : u === -1 ? 'Locked in. Click to turn it off.' : 'Locked in. It ends on its own.';
+  const away = on && canFull && !isFull();
+  $('lockGateTime').textContent = u === -1 ? '' : mmss(u - Date.now()) + ' left.';
+  if (away && !$('lockGate').open) $('lockGate').showModal();
+  else if (!away && $('lockGate').open) $('lockGate').close();
+}
+$('lockNote').textContent = canFull && canKeys
+  ? 'This page will fill the screen and keep the keys that would leave it. Getting out early means holding Esc, and closing the tab asks first. Your computer\'s own keys, like Ctrl+Alt+Del, still work.'
+  : canFull
+    ? 'This page will fill the screen, and closing the tab asks first. This browser cannot keep the Esc key, so if you press it the page will ask you to come back.'
+    : 'On this device the browser cannot keep you on the page, so only the timer runs. For a real lock on iPhone, use Guided Access: Settings > Accessibility > Guided Access, then triple-click the side button.';
+$('btnLock').onclick = () => {
+  if (!lockOn()) { $('lockDlg').showModal(); return; }
+  if (lockUntil() === -1) { if (confirm('Turn off Lock in?')) releaseLock('Lock in is off.'); return; }
+  msg('Locked in for ' + mmss(lockUntil() - Date.now()) + ' more. It ends on its own.');
+  lockScreen();
+};
+document.querySelectorAll('.lockopts .btn').forEach(b => b.onclick = () => {
+  const min = +b.dataset.min;
+  store.set('lockUntil', String(min ? Date.now() + min * 60000 : -1));
+  $('lockDlg').close(); lockScreen(); lockTick();
+});
+$('lockCancel').onclick = () => $('lockDlg').close();
+$('lockBack').onclick = () => { $('lockGate').close(); lockScreen(); setTimeout(lockTick, 400); };
+$('lockGate').addEventListener('cancel', e => e.preventDefault());
+document.addEventListener('fullscreenchange', lockTick);
+document.addEventListener('webkitfullscreenchange', lockTick);
+addEventListener('beforeunload', e => { if (lockOn()) { e.preventDefault(); e.returnValue = ''; } });
+document.addEventListener('click', e => {
+  const a = lockOn() && e.target.closest && e.target.closest('a[href]');
+  if (a && a.origin !== location.origin) { e.preventDefault(); msg('Locked in: links to other sites will open when the time is up.'); }
+}, true);
+setInterval(lockTick, 1000);
+lockTick();
 
 $('btnSync').onclick = () => {
   syncErr = ''; $('syIn').value = ''; $('syPin').value = '';
