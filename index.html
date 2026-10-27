@@ -1339,7 +1339,7 @@ const boxMeet = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(
 // it (one the hint touches, or one within `near` of the edge, since the hint
 // often covers only the middle of a row of panels) and by anything else the
 // hint takes in nearly whole.
-function pickBlocks(blocks, hint, maxArea, near) {
+function pickBlocks(blocks, hint, maxArea, near, tall = 1.6) {
   let main = null, best = 0;
   for (const b of blocks) {
     const o = boxArea(boxMeet(b, hint));
@@ -1352,9 +1352,10 @@ function pickBlocks(blocks, hint, maxArea, near) {
     grew = false;
     for (const b of left) {
       const cover = boxArea(boxMeet(b, hint)) / Math.max(1, boxArea(b));
-      // a panel lines up with the main block and is about as tall; a column of text is not
+      // a panel lines up with the main block and, unless it is a picture, is about
+      // as tall: a column of text is not
       const rowsShared = Math.min(b[2], main[2]) - Math.max(b[0], main[0]), mh = main[2] - main[0];
-      const beside = rowsShared >= Math.min(b[2] - b[0], mh) * 0.6 && b[2] - b[0] <= mh * 1.6;
+      const beside = rowsShared >= Math.min(b[2] - b[0], mh) * 0.6 && b[2] - b[0] <= mh * tall;
       const gap = Math.max(b[1] - box[3], box[1] - b[3]);
       if ((beside && (cover >= 0.25 || gap <= near)) || cover >= 0.85) {
         box[0] = Math.min(box[0], b[0]); box[1] = Math.min(box[1], b[1]); box[2] = Math.max(box[2], b[2]); box[3] = Math.max(box[3], b[3]);
@@ -1376,7 +1377,7 @@ function snapBox(cv, core, pics, texts) {
 
   // a pasted picture: logos and full-page scans aside, its own frame is the crop
   const ps = (pics || []).map(clampBox).filter(r => boxArea(r) > W * H * 0.004 && boxArea(r) < W * H * 0.8);
-  const hit = pickBlocks(ps, core, Infinity, W * 0.07);
+  const hit = pickBlocks(ps, core, Infinity, W * 0.07, Infinity);
   if (hit && boxArea(boxMeet(hit.main, core)) >= 0.3 * Math.min(boxArea(hit.main), boxArea(core))) {
     const pp = Math.round(Math.min(W, H) * 0.004), b = hit.box;
     return clampBox([b[0] - pp, b[1] - pp, b[2] + pp, b[3] + pp]);
