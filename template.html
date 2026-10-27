@@ -2164,9 +2164,15 @@ function renderCrumb() {
     c.appendChild(nb);
     return;
   }
-  const f = folders.find(x => x.id === curFolder);
   const back = document.createElement('button'); back.className = 'back'; back.textContent = '← Library';
   back.onclick = () => { curFolder = null; renderAll(); };
+  if (curFolder === UNFILED) {
+    const h = document.createElement('h2'); h.textContent = '/ Unfiled';
+    const n = document.createElement('span'); n.className = 'hint'; n.style.margin = '0';
+    n.textContent = 'Card sets whose folder is gone. Open one and pick a folder to move it.';
+    c.append(back, h, n); return;
+  }
+  const f = folders.find(x => x.id === curFolder);
   const h = document.createElement('h2'); h.textContent = '/ ' + f.name;
   const r = document.createElement('button'); r.className = 'btn'; r.textContent = 'Rename folder';
   r.onclick = () => renameFolder(f.id);
@@ -2177,7 +2183,7 @@ function renderFolderSel() {
   const sel = $('folderSel'); const prev = sel.value;
   sel.innerHTML = '<option value="">+ New folder (auto-named)</option><option value="__new">+ New folder, name it...</option>';
   folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.name; sel.appendChild(o); });
-  sel.value = curFolder || (folders.find(f => f.id === prev) ? prev : '');
+  sel.value = (curFolder !== UNFILED && curFolder) || (folders.find(f => f.id === prev) ? prev : '');
 }
 
 function renderGrid() {
@@ -2194,11 +2200,19 @@ function renderGrid() {
       t.onclick = () => { curFolder = f.id; renderAll(); };
       g.appendChild(t);
     });
-    if (!folders.length && !jobs.length) g.innerHTML = '<div class="empty">No folders yet. Make one with New folder, or upload a file or paste a link and press Summarize / Keep original.</div>';
+    const lost = unfiled();
+    if (lost.length) {
+      const t = document.createElement('div'); t.className = 'tile folder';
+      t.innerHTML = FOLDER_SVG + '<div class="fn">Unfiled</div><small></small>';
+      t.querySelector('small').textContent = lost.length + (lost.length === 1 ? ' card set' : ' card sets');
+      t.onclick = () => { curFolder = UNFILED; renderAll(); };
+      g.appendChild(t);
+    }
+    if (!folders.length && !jobs.length && !lost.length) g.innerHTML = '<div class="empty">No folders yet. Make one with New folder, or upload a file or paste a link and press Summarize / Keep original.</div>';
     return;
   }
   jobs.filter(j => j.snapshot.folderId === curFolder).forEach(j => g.appendChild(jobTile(j)));
-  const list = items.filter(i => i.folderId === curFolder);
+  const list = curFolder === UNFILED ? unfiled() : items.filter(i => i.folderId === curFolder);
   list.forEach(it => {
     const t = document.createElement('div'); t.className = 'tile';
     const f = document.createElement('iframe');
@@ -2215,8 +2229,12 @@ function renderGrid() {
   if (!list.length && !jobs.some(j => j.snapshot.folderId === curFolder)) g.innerHTML = '<div class="empty">This folder is empty.</div>';
 }
 
+// A card set whose folder is gone (deleted on another device, or not synced
+// yet) would otherwise be invisible; it shows in Unfiled until it is moved.
+const UNFILED = '__unfiled';
+const unfiled = () => items.filter(i => !folders.some(f => f.id === i.folderId));
 function renderAll() {
-  if (curFolder && !folders.find(f => f.id === curFolder)) curFolder = null;
+  if (curFolder === UNFILED ? !unfiled().length : curFolder && !folders.find(f => f.id === curFolder)) curFolder = null;
   renderCrumb(); renderFolderSel(); renderGrid();
 }
 
@@ -2298,8 +2316,9 @@ function openItem(id) {
   showDeck(it);
   markLook(it);
   const m = $('vMove'); m.innerHTML = '';
+  if (!folders.some(f => f.id === it.folderId)) m.innerHTML = '<option value="">Unfiled: pick a folder</option>';
   folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = 'Folder: ' + f.name; m.appendChild(o); });
-  m.value = it.folderId;
+  m.value = folders.some(f => f.id === it.folderId) ? it.folderId : '';
   $('viewer').showModal();
   if (store.get('fs', '0') === '1') enterViewerFull();
 }
@@ -2325,8 +2344,10 @@ addEventListener('message', async e => {
 });
 
 $('vMove').onchange = async e => {
-  const it = items.find(i => i.id === openId); if (!it) return;
-  it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it); renderAll(); syncSoon();
+  const it = items.find(i => i.id === openId); if (!it || !e.target.value) return;
+  it.folderId = e.target.value; it.updated = Date.now(); await dbPut('items', it);
+  if (e.target.options[0] && !e.target.options[0].value) e.target.options[0].remove();
+  renderAll(); syncSoon();
 };
 const nativeFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
 // Lock in keeps the whole page full screen; the viewer's full screen sits on
@@ -2504,23 +2525,33 @@ async function syncNow(quiet) {
     items = await dbAll('items'); folders = await dbAll('folders');
     const tombs = new Map((await dbAll('tomb')).map(t => [t.kind + ':' + t.eid, t]));
 
+    // Throughout, the newer of a deletion and a change wins: something changed
+    // or added after it was deleted elsewhere stays, and comes back there too.
     // 1. deletions that happened on another device
     for (const [rec, u] of remote) {
       if (!rec.startsWith('t_')) continue;
       const kind = rec.startsWith('t_i_') ? 'item' : 'folder', id = rec.slice(4), key = kind + ':' + id;
       const e = findEnt(kind, id);
-      if (e && stamp(e) > u) continue;              // it was recreated here afterwards
+      if (e && stamp(e) > u) continue;              // changed or recreated here afterwards
       if (e) {
         if (kind === 'item') { await dbDel('items', id); items = items.filter(x => x.id !== id); }
         else {
-          for (const it of items.filter(x => x.folderId === id && stamp(x) <= u)) { await dbDel('items', it.id); items = items.filter(x => x.id !== it.id); }
+          const inside = items.filter(x => x.folderId === id);
+          for (const it of inside.filter(x => stamp(x) <= u)) { await dbDel('items', it.id); items = items.filter(x => x.id !== it.id); }
+          if (inside.some(x => stamp(x) > u)) {
+            // card sets put in the folder after it was deleted elsewhere keep it,
+            // so they are never left without a folder
+            e.updated = Date.now(); await dbPut('folders', e); continue;
+          }
           await dbDel('folders', id); folders = folders.filter(x => x.id !== id);
         }
       }
       if (!tombs.has(key)) { const t = { id: key, kind, eid: id, deleted: u, created: u }; await dbPut('tomb', t); tombs.set(key, t); }
     }
     // 2. deletions made here
-    for (const [key, t] of tombs) {
+    for (const [key, t] of [...tombs]) {
+      const back = findEnt(t.kind, t.eid);
+      if (back && stamp(back) > t.deleted) { await dbDel('tomb', t.id); tombs.delete(key); continue; }   // it lives again
       const rec = tombRec(t.kind, t.eid);
       if (!remote.has(rec)) {
         syncStage = 'Sending a deletion...'; renderSync();
@@ -2534,7 +2565,9 @@ async function syncNow(quiet) {
     for (const [rec, u] of remote) {
       if (rec.startsWith('t_')) continue;
       const kind = rec.startsWith('i_') ? 'item' : 'folder', id = rec.slice(2);
-      if (tombs.has(kind + ':' + id)) continue;
+      const t = tombs.get(kind + ':' + id);
+      if (t && u <= t.deleted) continue;
+      if (t) { await dbDel('tomb', t.id); tombs.delete(kind + ':' + id); }   // changed elsewhere after it was deleted here
       const e = findEnt(kind, id);
       if (!e || u > stamp(e)) want.push([kind, rec]);
     }
@@ -2560,7 +2593,8 @@ async function syncNow(quiet) {
     const mine = [...folders.map(x => ['folder', x]), ...items.map(x => ['item', x])]
       .filter(([k, e]) => {
         const rec = recOf(k, e.id);
-        if (tombs.has(k + ':' + e.id) || (remote.has(rec) && stamp(e) <= remote.get(rec))) return false;
+        const t = tombs.get(k + ':' + e.id);
+        if ((t && stamp(e) <= t.deleted) || (remote.has(rec) && stamp(e) <= remote.get(rec))) return false;
         if (big[rec] === stamp(e)) { failed.push(nameOf(e) + ' is too large to sync'); return false; }
         return !(sent[rec] && sent[rec][0] === stamp(e));
       });
@@ -2574,7 +2608,7 @@ async function syncNow(quiet) {
       }
     }
     store.set('syncSent', JSON.stringify(sent)); store.set('syncBig', JSON.stringify(big));
-    items.sort((a, b) => b.created - a.created); folders.sort((a, b) => b.created - a.created);
+    items = await dbAll('items'); folders = await dbAll('folders');
     store.set('synclast', String(Date.now()));
     renderAll();
     if (failed.length) {
