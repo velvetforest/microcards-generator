@@ -32,14 +32,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 header h1{font-family:'Pacifico',cursive;font-size:28px;margin:0;color:var(--strong);font-weight:400;letter-spacing:.5px;line-height:1.2}
 .gear{width:46px;height:46px;border-radius:14px;padding:0;display:flex;align-items:center;justify-content:center}
 .gear svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-header h1 span{text-shadow:var(--glow-text)}
-header h1 .p{color:var(--accent)}
-header h1 .g{color:var(--alt-ink)}
+header h1{color:var(--deep);text-shadow:var(--glow-text)}
 button{font-family:inherit;cursor:pointer}
 .btn{border:1px solid var(--border);background:var(--white);color:var(--deep);border-radius:12px;padding:9px 16px;font-size:13px;font-weight:600}
 .btn:hover{border-color:var(--accent)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on);box-shadow:var(--glow)}
-.btn.primary:hover{background:var(--accent-hover)}
+.btn.primary{background:var(--grad);border-color:transparent;color:var(--on);box-shadow:var(--glow)}
+.btn.primary:hover{filter:brightness(1.07)}
 .btn.alt{background:var(--alt);border-color:var(--alt-bd);color:var(--alt-fg)}
 .btn.alt:hover{background:var(--alt-hover)}
 .btn.danger{color:var(--danger)}
@@ -62,11 +60,11 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .seg button.on{background:var(--soft);color:var(--deep)}
 kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:0 5px;margin-left:4px;color:var(--muted);background:var(--surface)}
 .themebtn{display:flex;align-items:center;gap:8px;height:46px;border-radius:14px}
-.palrow{display:flex;align-items:center;gap:6px;padding:5px 7px;border:1px solid var(--border);border-radius:14px;background:var(--white)}
+.palrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:5px 7px;border:1px solid var(--border);border-radius:14px;background:var(--white)}
 .pal{width:26px;height:26px;border-radius:8px;border:2px solid var(--border);padding:0;position:relative;transition:transform .12s}
 .pal:hover{transform:scale(1.12)}
 .pal.on{outline:2px solid var(--deep);outline-offset:2px}
-.pal.on::after{content:'\2713';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#2D2D2D}
+.pal.on::after{content:'\2713';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55)}
 .cpal{display:flex;gap:6px;flex-wrap:wrap}
 .cpal button{width:24px;height:24px;border-radius:7px;border:2px solid var(--border);padding:0}
 .cpal button:hover{transform:scale(1.1)}
@@ -77,7 +75,28 @@ kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--bo
 #pgRange{width:210px;max-width:100%}
 #noticeInput{flex:1;min-width:240px;width:auto}
 #pgRange:disabled{opacity:.5;cursor:not-allowed}
-.composer{position:relative}
+.composer{position:relative;overflow:hidden}
+.composer::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--grad);pointer-events:none}
+body::before{content:'';position:fixed;inset:0;z-index:-1;background:var(--mesh);pointer-events:none}
+/* Dark mode: frosted glass on the composer and the folders, its edge glowing.
+   It needs colour behind it, which the page's mesh gives. The sharp line is
+   ::before, the light spreading both ways from it is the box-shadow. */
+:root[data-theme="dark"] header{border-bottom-color:rgba(255,255,255,.08)}
+:root[data-theme="dark"] .composer,:root[data-theme="dark"] .tile.folder{
+  background:var(--glass);border-color:transparent;
+  -webkit-backdrop-filter:blur(20px) saturate(150%);backdrop-filter:blur(20px) saturate(150%);
+  box-shadow:0 0 14px var(--rim-mid),0 0 46px var(--rim-lo),0 12px 36px rgba(0,0,0,.42),inset 0 0 12px var(--rim-mid),inset 0 0 44px var(--rim-lo)}
+:root[data-theme="dark"] .composer::before,:root[data-theme="dark"] .tile.folder::before{
+  content:'';position:absolute;inset:0;height:auto;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:linear-gradient(150deg,var(--rim),var(--rim-hi) 34%,var(--rim-mid) 62%,var(--rim));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+:root[data-theme="dark"] .tile.folder{box-shadow:0 0 10px var(--rim-mid),0 0 30px var(--rim-lo),0 10px 28px rgba(0,0,0,.4),inset 0 0 9px var(--rim-mid),inset 0 0 30px var(--rim-lo)}
+:root[data-theme="dark"] .tile.folder:hover{box-shadow:0 0 16px var(--rim-hi),0 0 44px var(--rim-mid),0 12px 32px rgba(0,0,0,.42),inset 0 0 12px var(--rim-hi),inset 0 0 36px var(--rim-lo)}
+:root[data-theme="dark"] .composer :is(textarea,input:not([type=checkbox]),select,.field,.btn:not(.primary)){background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.13)}
+:root[data-theme="dark"] .composer select option{background:var(--panel)}
+:root[data-theme="dark"] .fo-fill{opacity:.5}
+:root[data-theme="dark"] .fo-sheen{display:block;stroke:var(--rim-hi);stroke-width:.9}
+:root[data-theme="dark"] .tile.folder svg{filter:drop-shadow(0 0 10px var(--rim-lo))}
 .composer.drag{outline:2px dashed var(--accent);outline-offset:4px}
 .composer.drag::after{content:'Drop files to add them';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:20px;background:var(--soft);color:var(--deep);font-weight:700;font-size:16px;pointer-events:none;backdrop-filter:blur(2px)}
 [hidden]{display:none !important}
@@ -117,7 +136,7 @@ details.adv summary:hover{color:var(--deep)}
 .sy-allow .btn{padding:5px 12px;font-size:12px;border-radius:9px}
 .spacer{flex:1}
 .switch{position:relative;width:56px;height:28px;border-radius:999px;border:1px solid var(--border);background:var(--surface);padding:0;flex:none}
-.switch .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on);display:flex;align-items:center;justify-content:center;transition:transform .2s;box-shadow:var(--glow)}
+.switch .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:var(--grad);color:var(--on);display:flex;align-items:center;justify-content:center;transition:transform .2s;box-shadow:var(--glow)}
 .switch .knob svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .switch .moon{display:none}
 .switch[aria-checked=true] .knob{transform:translateX(28px)}
@@ -143,8 +162,9 @@ h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
 .tile .e{font-size:12px;color:var(--danger);max-height:90px;overflow:auto}
 .spin{width:30px;height:30px;border-radius:50%;border:3px solid var(--soft);border-top-color:var(--accent);animation:sp 1s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
-.tile.folder{background:var(--soft);border-color:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;text-align:center}
-.tile.folder svg{width:84px;height:84px}
+.tile.folder{background:var(--soft);border-color:var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;text-align:center}
+.tile.folder svg{width:92px;height:92px;overflow:visible}
+.fo-sheen{display:none}
 .tile.folder .fn{font-size:14px;font-weight:700;color:var(--strong);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .tile.folder small{font-size:11px;color:var(--deep)}
 .tile .ren{position:absolute;top:8px;right:44px;width:30px;height:30px;border-radius:50%;border:0;background:var(--ovl);color:var(--deep);font-size:14px;opacity:0;transition:opacity .15s}
@@ -172,8 +192,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 #viewer[open]{display:flex}
 #viewer .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
 #viewer .bar b{flex:1 1 160px;min-width:0;font-size:14px;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#viewer .vlook{display:flex;gap:10px;align-items:center}
-#viewer .vlook .cpal{flex-wrap:nowrap}
+#viewer .vlook{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 #viewer .vlook .cpal button{width:20px;height:20px;border-radius:6px}
 #viewer iframe{flex:1;border:0;width:100%}
 #viewer.pfull{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;inset:0}
@@ -182,7 +201,10 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 #viewer.pfull #vExit{display:block}
 @media (max-width:560px){
   .hdr{gap:8px}
-  .palrow{gap:5px;padding:4px 6px} .pal{width:22px;height:22px;border-radius:7px}
+  header{flex-wrap:wrap;gap:10px}
+  .hdr{width:100%;justify-content:flex-start;gap:8px}
+  .palrow{width:100%;flex-wrap:nowrap;justify-content:space-between;gap:3px;padding:4px 6px} .pal{width:22px;height:22px;border-radius:7px}
+  .cpal{gap:5px} .cpal button{width:20px;height:20px;border-radius:6px}
   header{padding:12px 14px} header h1{font-size:23px} main{padding:14px}
   .composer{padding:14px} .actions .spacer{flex-basis:100%;height:0}
   #viewer{width:100vw;height:100dvh;max-width:100vw;border-radius:0}
@@ -416,8 +438,13 @@ $('modeSw').onclick = () => {
 };
 
 // ---------- Color themes ----------
+// Each palette is one colour. In dark mode the glass is tinted by c, and rim is
+// the light along its edge; g is what text sits on. Any of them left out
+// follows the palette's accent.
 const PAL = [
-  { id: 'pink', name: 'Pink', sw: '#E89CAE' },
+  { id: 'pink', name: 'Pink', sw: '#E89CAE',
+    light: { bg:'#F8F4EE', panel:'#FAF7F2', surface:'#F4EFEA', white:'#FFFFFF', border:'#EBDED6', text:'#383331', strong:'#2C2A29', muted:'#8C7A75', accent:'#E89CAE', hover:'#D88B9D', deep:'#A64B5E', soft:'#F4D3DA', on:'#FFFFFF' },
+    dark:  { bg:'#232323', panel:'#2D2D2D', surface:'#363033', white:'#3D3539', border:'#4A3C42', text:'#F3D9E0', strong:'#FFB8CB', muted:'#A58C95', accent:'#FF9DB8', hover:'#FFB3C8', deep:'#FF8FAE', on:'#2D2D2D' } },
   { id: 'sage', name: 'Sage', sw: '#97B3AE',
     light: { bg:'#F1F5F4', panel:'#F8FAF9', surface:'#E6EEEC', white:'#FFFFFF', border:'#D0DFDB', text:'#2F3B39', strong:'#1F2B29', muted:'#6B827E', accent:'#97B3AE', hover:'#86A39E', deep:'#43645F', soft:'#DAE7E4', on:'#1F2B29' },
     dark:  { bg:'#1F2524', panel:'#28302F', surface:'#2F3938', white:'#364140', border:'#435250', text:'#DCEAE7', strong:'#A9D6CE', muted:'#8CA5A0', accent:'#9FC9C0', hover:'#B5DAD3', deep:'#8CC9BD', on:'#1F2524' } },
@@ -432,18 +459,50 @@ const PAL = [
     dark:  { bg:'#242423', panel:'#2E2E2C', surface:'#373735', white:'#3F3F3C', border:'#4F4E4A', text:'#EEEBE5', strong:'#F0EEEA', muted:'#A5A29B', accent:'#CFCAC0', hover:'#E0DCD3', deep:'#D8D3C9', on:'#242423' } },
   { id: 'lavender', name: 'Lavender', sw: '#C9B8E8',
     light: { bg:'#F5F2FA', panel:'#FBF9FE', surface:'#EDE7F6', white:'#FFFFFF', border:'#DCD2EC', text:'#36303F', strong:'#261F33', muted:'#82759A', accent:'#C9B8E8', hover:'#B9A5DE', deep:'#6B4FA3', soft:'#E5DCF4', on:'#261F33' },
-    dark:  { bg:'#231F2A', panel:'#2D2836', surface:'#363040', white:'#3E3748', border:'#4D4560', text:'#E9E0F7', strong:'#D6C3FB', muted:'#A092BA', accent:'#BBA2F0', hover:'#CDB8F7', deep:'#C6AEF5', on:'#231F2A' } }
+    dark:  { bg:'#231F2A', panel:'#2D2836', surface:'#363040', white:'#3E3748', border:'#4D4560', text:'#E9E0F7', strong:'#D6C3FB', muted:'#A092BA', accent:'#BBA2F0', hover:'#CDB8F7', deep:'#C6AEF5', on:'#231F2A' } },
+  { id: 'burgundy', name: 'Burgundy', sw: '#8E2145',
+    light: { c:'#8A1F3F', g:'#8A1F3F', bg:'#FBF5F6', panel:'#FFFBFC', surface:'#F7ECEF', white:'#FFFFFF', border:'#EFDCE1', text:'#3A282D', strong:'#2B171D', muted:'#7F6369', accent:'#8A1F3F', hover:'#741A35', deep:'#8A1F3F', soft:'#F6E0E6', on:'#FFFFFF' },
+    dark:  { c:'#A8234C', g:'#F29BB2', rim:'#FFD9E2', bg:'#130A0E', panel:'#1F1217', surface:'#2B1A21', white:'#342029', border:'#4E2D39', text:'#F7E4E9', strong:'#FFC9D6', muted:'#B8979F', accent:'#F29BB2', hover:'#F7B6C7', deep:'#F6ABBF', on:'#1E0E14' } },
+  { id: 'cosmic', name: 'Cosmic Orange', sw: '#E8651A',
+    light: { c:'#D9601E', g:'#B0460F', bg:'#FCF6F1', panel:'#FFFBF8', surface:'#FAEEE5', white:'#FFFFFF', border:'#F2DFD1', text:'#3A2A22', strong:'#2A1B13', muted:'#7E685B', accent:'#B0460F', hover:'#9A3D0D', deep:'#A5410E', soft:'#FCE6D6', on:'#FFFFFF' },
+    dark:  { c:'#E8651A', g:'#FF9F63', rim:'#FFE3CC', bg:'#130C08', panel:'#1F1510', surface:'#2B1E16', white:'#34251C', border:'#4E3527', text:'#F8E8DD', strong:'#FFCFAF', muted:'#B89E8D', accent:'#FF9F63', hover:'#FFB98C', deep:'#FFAE7E', on:'#1C1008' } },
+  { id: 'teal', name: 'Teal', sw: '#0C8F96',
+    light: { c:'#0B7C86', g:'#0B6E78', bg:'#F1F8F8', panel:'#FAFDFD', surface:'#E6F3F4', white:'#FFFFFF', border:'#CFE6E8', text:'#1F3437', strong:'#0F2427', muted:'#587478', accent:'#0B6E78', hover:'#095E67', deep:'#0B6470', soft:'#D5EEF0', on:'#FFFFFF' },
+    dark:  { c:'#0C8F96', g:'#62D4D6', rim:'#C9F7F5', bg:'#081314', panel:'#0F1D1F', surface:'#15292B', white:'#1B3234', border:'#29474A', text:'#DFF3F3', strong:'#A5EAE8', muted:'#8AABAD', accent:'#62D4D6', hover:'#8AE2E3', deep:'#7FDDDD', on:'#081618' } },
+  { id: 'rosegold', name: 'Rose Gold', sw: '#D49A85',
+    light: { c:'#B8735C', g:'#8E4C38', bg:'#FBF6F3', panel:'#FFFCFA', surface:'#F8EEE9', white:'#FFFFFF', border:'#EFDFD7', text:'#3D2C27', strong:'#2C1C18', muted:'#806860', accent:'#8E4C38', hover:'#7C4231', deep:'#8E4C38', soft:'#F7E3DA', on:'#FFFFFF' },
+    dark:  { c:'#C98A74', g:'#EFBBA8', rim:'#FFE6DC', bg:'#130E0C', panel:'#1F1714', surface:'#2B211D', white:'#342925', border:'#4E3C35', text:'#F7E9E3', strong:'#FFD6C6', muted:'#B8A198', accent:'#EFBBA8', hover:'#F6D0C2', deep:'#F2C4B3', on:'#1C1310' } },
+  { id: 'sky', name: 'Light Blue', sw: '#8CCBF2',
+    light: { c:'#3F8FCB', g:'#2A72A6', bg:'#F4F8FB', panel:'#FBFDFE', surface:'#EAF2F8', white:'#FFFFFF', border:'#D6E5F0', text:'#26333F', strong:'#15222D', muted:'#5F7284', accent:'#2A72A6', hover:'#246391', deep:'#256A98', soft:'#DCECF7', on:'#FFFFFF' },
+    dark:  { c:'#4F9BD6', g:'#9BD3F5', rim:'#D8F0FF', bg:'#0A1016', panel:'#141C25', surface:'#1D2833', white:'#24303D', border:'#374858', text:'#E6F0F7', strong:'#BFE3F9', muted:'#97A9B9', accent:'#9BD3F5', hover:'#BCE2F9', deep:'#A9DAF7', on:'#0E151C' } },
+  { id: 'violet', name: 'Violet', sw: '#7A5FD6',
+    light: { c:'#6B4FC8', g:'#5A3FA8', bg:'#F6F4FB', panel:'#FCFBFF', surface:'#EFEBF8', white:'#FFFFFF', border:'#DED7EE', text:'#302B40', strong:'#211C30', muted:'#70678A', accent:'#5A3FA8', hover:'#4D3592', deep:'#533A9C', soft:'#E6DFF6', on:'#FFFFFF' },
+    dark:  { c:'#6B4FC8', g:'#BFA9F5', rim:'#FFF3D6', bg:'#0E0B18', panel:'#181427', surface:'#221D33', white:'#2A243D', border:'#3F3757', text:'#EAE4F8', strong:'#D3C4FB', muted:'#A498BE', accent:'#BFA9F5', hover:'#D2C2F9', deep:'#C9B6F7', on:'#120E20' } }
 ];
-const PAL_KEYS = ['--bg','--panel','--surface','--white','--border','--text','--strong','--muted','--accent','--accent-hover','--deep','--soft','--on','--ovl','--shadow','--shadow-hover','--glow','--glow-text'];
-let curPal = store.get('palette') || 'pink';
+const palId = id => PAL.some(x => x.id === id) ? id : 'pink';
+const PAL_KEYS = ['--bg','--panel','--surface','--white','--border','--text','--strong','--muted','--accent','--accent-hover','--deep','--soft','--on','--ovl','--shadow','--shadow-hover','--glow','--glow-text',
+  '--c','--g','--grad','--grad-soft','--mesh','--rim','--rim-hi','--rim-mid','--rim-lo','--glass','--alt','--alt-hover','--alt-bd','--alt-fg','--alt-ink'];
+let curPal = palId(store.get('palette'));
 const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 
+const mixTo = (h, to, k) => {
+  const n = parseInt(h.slice(1), 16), m = v => Math.round(v + (to - v) * k);
+  return '#' + [m((n >> 16) & 255), m((n >> 8) & 255), m(n & 255)].map(x => x.toString(16).padStart(2, '0')).join('');
+};
 function palVars(p, dark) {
-  const c = dark ? p.dark : p.light, v = {};
+  const t = dark ? p.dark : p.light, v = {};
+  const c = Object.assign({ c: dark ? mixTo(t.accent, 0, .52) : t.accent, g: t.accent, rim: mixTo(t.accent, 255, .62) }, t);
   v['--bg'] = c.bg; v['--panel'] = c.panel; v['--surface'] = c.surface; v['--white'] = c.white; v['--border'] = c.border;
   v['--text'] = c.text; v['--strong'] = c.strong; v['--muted'] = c.muted;
   v['--accent'] = c.accent; v['--accent-hover'] = c.hover; v['--deep'] = c.deep; v['--on'] = c.on;
+  v['--c'] = c.c; v['--g'] = c.g;
+  v['--grad'] = `linear-gradient(${c.g},${c.g})`;
   if (dark) {
+    v['--grad-soft'] = `linear-gradient(${hexA(c.g, .2)},${hexA(c.g, .2)})`;
+    v['--mesh'] = `radial-gradient(44vmax 34vmax at 12% 16%,${hexA(c.c, .6)},transparent 70%),radial-gradient(38vmax 30vmax at 90% 26%,${hexA(c.c, .34)},transparent 70%),radial-gradient(48vmax 36vmax at 62% 104%,${hexA(c.c, .42)},transparent 72%)`;
+    v['--glass'] = `linear-gradient(135deg,${hexA(c.c, .3)},rgba(255,255,255,.045) 48%,${hexA(c.c, .16)})`;
+    v['--rim'] = c.rim; v['--rim-hi'] = hexA(c.rim, .6); v['--rim-mid'] = hexA(c.rim, .3); v['--rim-lo'] = hexA(c.rim, .13);
+    v['--alt'] = 'rgba(255,255,255,.08)'; v['--alt-hover'] = 'rgba(255,255,255,.14)'; v['--alt-bd'] = 'rgba(255,255,255,.16)'; v['--alt-fg'] = c.text; v['--alt-ink'] = c.accent;
     v['--soft'] = hexA(c.accent, .16); v['--ovl'] = hexA(c.white, .94);
     v['--shadow'] = `0 0 0 1px ${hexA(c.accent, .14)},0 16px 44px -10px ${hexA(c.accent, .28)}`;
     v['--shadow-hover'] = `0 0 0 1px ${hexA(c.accent, .3)},0 16px 44px -10px ${hexA(c.accent, .45)}`;
@@ -451,6 +510,10 @@ function palVars(p, dark) {
     v['--glow-text'] = `0 0 5px ${hexA(c.accent, .22)}`;
   } else {
     v['--soft'] = c.soft;
+    v['--grad-soft'] = `linear-gradient(${c.soft},${c.soft})`;
+    v['--mesh'] = `radial-gradient(40vmax 30vmax at 10% 0%,${hexA(c.c, .08)},transparent 70%),radial-gradient(36vmax 28vmax at 94% 12%,${hexA(c.c, .06)},transparent 70%)`;
+    v['--glass'] = c.panel; v['--rim'] = v['--rim-hi'] = v['--rim-mid'] = v['--rim-lo'] = 'transparent';
+    v['--alt'] = c.soft; v['--alt-hover'] = c.border; v['--alt-bd'] = c.border; v['--alt-fg'] = c.deep; v['--alt-ink'] = c.accent;
     v['--shadow'] = `0 12px 30px -8px ${hexA(c.deep, .18)}`;
     v['--shadow-hover'] = `0 12px 30px -8px ${hexA(c.deep, .32)}`;
   }
@@ -469,22 +532,28 @@ function applyPalette() {
 }
 
 // Card colors: override the style-guide tokens inside the generated HTML
-let curCardPal = store.get('cardPal') || 'pink';
+let curCardPal = palId(store.get('cardPal'));
 function cardPaletteCss(id) {
-  const p = PAL.find(x => x.id === id);
-  if (!p || !p.light) return '';
+  const p = PAL.find(x => x.id === palId(id));
   const block = dark => {
-    const v = palVars(p, dark), c = dark ? p.dark : p.light;
+    const v = palVars(p, dark), c = dark ? p.dark : p.light, g = c.g || c.accent;
     const m = { '--page-bg': c.bg, '--card-bg': c.panel, '--surface': c.surface, '--surface-solid': c.white, '--border': c.border,
       '--text': c.text, '--text-strong': c.strong, '--text-muted': c.muted, '--text-sub': c.text,
-      '--accent': c.accent, '--accent-hover': c.hover, '--accent-deep': c.deep, '--accent-soft': v['--soft'], '--on-accent': c.on, '--shadow-card': v['--shadow'] };
+      '--accent': c.accent, '--accent-hover': c.hover, '--accent-deep': c.deep, '--accent-soft': v['--soft'], '--on-accent': c.on, '--shadow-card': v['--shadow'],
+      '--g': g, '--grad': v['--grad'], '--grad-soft': v['--grad-soft'] };
     if (dark) {
       m['--glow'] = v['--glow']; m['--glow-text'] = v['--glow-text'];
       m['--glow-svg'] = `drop-shadow(0 0 2px ${hexA(c.accent, .42)}) drop-shadow(0 0 6px ${hexA(c.accent, .16)})`;
     }
     return Object.keys(m).map(k => k + ':' + m[k]).join(';');
   };
-  return `<style id="card-palette">html:root[data-theme="light"]{${block(false)}}html:root[data-theme="dark"]{${block(true)}}</style>`;
+  // these rules carry the colour, so a card set made earlier takes it on too
+  const mix = '.tb.pri,.tb.pri:hover{background:var(--grad);border-color:transparent}.tb.pri:hover{filter:brightness(1.06)}' +
+    '.dots button{background:var(--g)}.dots button.on{background:var(--grad)}' +
+    '.sec-title::before,.c-dot,.bul li::before{background:var(--grad)}.badge,.hl{background:var(--grad-soft)}' +
+    '.custom-scrollbar::-webkit-scrollbar-thumb{background:var(--grad)}' +
+    ".insta-card{position:relative}.insta-card::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--grad);pointer-events:none}";
+  return `<style id="card-palette">html:root[data-theme="light"]{${block(false)}}html:root[data-theme="dark"]{${block(true)}}${mix}</style>`;
 }
 // Runs inside a deck once its cards are built. Nothing in a card may spill
 // over the content after it:
@@ -497,6 +566,71 @@ function cardPaletteCss(id) {
 // It runs again as fonts, formulas and styles arrive, since each can change
 // the heights.
 function figFit() {
+  // ---- formulas. Models write maths in more ways than KaTeX's page scan takes:
+  // single dollars, doubled backslashes, wrapped in <code>, a bare < that the
+  // browser reads as a tag, tags inside. All of it becomes \( \) before the
+  // deck is built; in drawings, where KaTeX cannot go, it becomes plain text.
+  var INLINE_TAG = 'sup|sub|em|i|b|strong|span|mark|br';
+  var BADTAG = new RegExp('</?(?!(?:' + INLINE_TAG + ')\\b)[a-z][^<>]*>', 'i');
+  var DELIM = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)/g;
+  var TEX = { infty: '∞', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', times: '×', cdot: '·', to: '→', rightarrow: '→', leftarrow: '←', Rightarrow: '⇒', sum: '∑', prod: '∏', in: '∈', notin: '∉', subset: '⊂', cup: '∪', cap: '∩', forall: '∀', exists: '∃', pm: '±', approx: '≈', alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', theta: 'θ', lambda: 'λ', mu: 'μ', pi: 'π', sigma: 'σ', phi: 'φ', omega: 'ω', Delta: 'Δ', Sigma: 'Σ', Omega: 'Ω', ldots: '…', dots: '…' };
+  function undouble(s) {
+    function fix(open, close) { return function (m, t) { return open + t.replace(/\\\\/g, '\\') + close; }; }
+    return s.replace(/\\\\\(([\s\S]+?)\\\\\)/g, fix('\\(', '\\)')).replace(/\\\\\[([\s\S]+?)\\\\\]/g, fix('\\[', '\\]'));
+  }
+  // a price is not a formula: "$5 and $10", "100$, 200$"
+  function dollars(s) {
+    return s.replace(/(^|[^\\$\d])\$(?![\s$])((?:\\[\s\S]|[^$\\\n])+?)\$(?![\d$])/g, function (m, pre, tex) {
+      var money = /^\d/.test(tex) && /\s/.test(tex) && /[A-Za-zÀ-ỹ]{2,}/.test(tex.replace(/\\[a-zA-Z]+/g, ''));
+      return money || /\s$/.test(tex) || BADTAG.test(tex) ? m : pre + '\\(' + tex + '\\)';
+    });
+  }
+  function unwrapped(s) { return s.replace(/<code\b[^>]*>\s*(\$[^<]*\$|\\\([^<]*\\\)|\\\[[^<]*\\\])\s*<\/code>/gi, function (m, t) { return t; }); }
+  function inTags(m) {
+    if (BADTAG.test(m)) return m;
+    return m.replace(/<sup\b[^>]*>([\s\S]*?)<\/sup>/gi, function (x, t) { return '^{' + t + '}'; })
+      .replace(/<sub\b[^>]*>([\s\S]*?)<\/sub>/gi, function (x, t) { return '_{' + t + '}'; })
+      .replace(new RegExp('</?(?:' + INLINE_TAG + ')\\b[^<>]*>', 'gi'), ' ').replace(/</g, '&lt;');
+  }
+  function plain(t) {
+    return t.replace(/^\$\$|\$\$$|^\\[([]|\\[\])]$/g, '')
+      .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, function (m, a, b) { return a + '/' + b; })
+      .replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^{}]*)\}/g, function (m, a) { return a; })
+      .replace(/\\([A-Za-z]+)/g, function (m, k) { return TEX[k] || k; }).replace(/\\[,;:! ]/g, ' ').replace(/[{}]/g, '');
+  }
+  function line(s) { return typeof s === 'string' ? dollars(undouble(s)) : s; }
+  function words(s) { return line(s).replace(DELIM, plain); }
+  function body(s) {
+    if (typeof s !== 'string' || !/[$\\]/.test(s)) return s;
+    return s.split(/(<pre\b[\s\S]*?<\/pre>|<svg\b[\s\S]*?<\/svg>|<style\b[\s\S]*?<\/style>|<img\b[^>]*>)/i).map(function (part, i) {
+      if (i % 2) return /^<svg/i.test(part) ? part.replace(/>([^<]+)</g, function (m, t) { return '>' + words(t) + '<'; }) : part;
+      return dollars(unwrapped(undouble(part))).replace(DELIM, inTags);
+    }).join('');
+  }
+  function hook(name, fix) {
+    var v;
+    Object.defineProperty(window, name, { configurable: true, get: function () { return v; }, set: function (x) { try { fix(x); } catch (e) {} v = x; } });
+  }
+  hook('__DECK', function (d) {
+    d.cards.forEach(function (c) { c.body = body(c.body); c.title = line(c.title); c.badge = line(c.badge); c.label = line(c.label); });
+    d.title = line(d.title);
+  });
+  hook('__GRAPHS', function walk(o) {
+    Object.keys(o).forEach(function (k) { if (typeof o[k] === 'string') o[k] = words(o[k]); else if (o[k] && typeof o[k] === 'object') walk(o[k]); });
+  });
+  // the first copy of KaTeX did not load: try another source
+  function katexAgain() {
+    var base = 'https://unpkg.com/katex@0.16.9/dist/', l = document.createElement('link');
+    l.rel = 'stylesheet'; l.href = base + 'katex.min.css'; document.head.appendChild(l);
+    function add(src, then) { var e = document.createElement('script'); e.src = base + src; e.onload = then; document.head.appendChild(e); }
+    add('katex.min.js', function () {
+      add('contrib/auto-render.min.js', function () {
+        renderMathInElement(document.getElementById('track'), { delimiters: [{ left: '$$', right: '$$', display: true }, { left: '\\[', right: '\\]', display: true }, { left: '\\(', right: '\\)', display: false }], throwOnError: false });
+        later();
+      });
+    });
+  }
+
   function frames() {
     document.querySelectorAll('.card-body .fig-img').forEach(function (img) {
       var frame = img.closest('.illus-fill, .illus');
@@ -533,6 +667,7 @@ function figFit() {
   var t = null;
   function later() { clearTimeout(t); t = setTimeout(unspill, 120); }
   document.addEventListener('DOMContentLoaded', function () {
+    if (!window.renderMathInElement) katexAgain();
     frames(); unspill();
     [600, 1500, 3000].forEach(function (ms) { setTimeout(unspill, ms); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(later);
@@ -552,7 +687,8 @@ const FIG_FIT = '<style>.illus-fill{position:relative}.illus-fill>.fig-img{posit
 function withNotes(html, notes, on, editable, at) {
   if (!/window\.__DECK=/.test(html)) return html;
   const payload = JSON.stringify({ map: notes || {}, on: on !== false, editable: !!editable, label: 'Notes', at: at > 0 ? at : 0 }).replace(/</g, '\\u003c');
-  return html.replace('<script>window.__DECK=', FIG_FIT + '<scr' + 'ipt>window.__NOTES=' + payload + ';<\/scr' + 'ipt><scr' + 'ipt>window.__DECK=');
+  // a function, so a $ in here is never read as a replacement pattern
+  return html.replace('<script>window.__DECK=', () => FIG_FIT + '<scr' + 'ipt>window.__NOTES=' + payload + ';<\/scr' + 'ipt><scr' + 'ipt>window.__DECK=');
 }
 const notesOn = () => store.get('notesOn', '1') === '1';
 const posOf = id => +store.get('pos:' + id, '0') || 0;
@@ -561,7 +697,7 @@ const posOf = id => +store.get('pos:' + id, '0') || 0;
 // are laid over it whenever it is shown, so both can change at any time.
 function themed(html, it) {
   if (it.mode === 'light' || it.mode === 'dark') html = html.replace(/(<html\b[^>]*\bdata-theme=")(light|dark)"/i, '$1' + it.mode + '"');
-  if (it.pal) html = applyCardPalette(html.replace(/<style id="card-palette">[\s\S]*?<\/style>/g, ''), it.pal);
+  html = applyCardPalette(html.replace(/<style id="card-palette">[\s\S]*?<\/style>/g, ''), it.pal);
   return html;
 }
 const deckHtml = it => themed(it.html, it);
@@ -2122,7 +2258,9 @@ const ro = new ResizeObserver(es => es.forEach(en => {
   if (f) f.style.transform = `scale(${en.contentRect.width / 700})`;
 }));
 
-const FOLDER_SVG = '<svg viewBox="0 0 96 96"><path d="M8 24a6 6 0 0 1 6-6h22l8 9h38a6 6 0 0 1 6 6v39a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z" fill="var(--accent)"/><path d="M8 38h80v31a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z" fill="var(--accent-hover)" opacity=".55"/></svg>';
+const FOLDER_PATH = 'M8 24a6 6 0 0 1 6-6h22l8 9h38a6 6 0 0 1 6 6v39a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z';
+const FOLDER_SVG = '<svg viewBox="0 0 96 96" aria-hidden="true"><defs><linearGradient id="foB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".26"/><stop offset="1" stop-color="#fff" stop-opacity=".04"/></linearGradient></defs>' +
+  '<path class="fo-fill" d="' + FOLDER_PATH + '" style="fill:var(--c)"/><path class="fo-sheen" d="' + FOLDER_PATH + '" fill="url(#foB)"/></svg>';
 
 function iconBtn(cls, label, html, fn) {
   const b = document.createElement('button'); b.className = cls; b.title = label; b.innerHTML = html;
@@ -2216,7 +2354,7 @@ function renderGrid() {
   list.forEach(it => {
     const t = document.createElement('div'); t.className = 'tile';
     const f = document.createElement('iframe');
-    f.setAttribute('sandbox', 'allow-scripts'); f.loading = 'lazy'; f.srcdoc = deckHtml(it); f.tabIndex = -1;
+    f.setAttribute('sandbox', 'allow-scripts'); f.loading = 'lazy'; f.srcdoc = withNotes(deckHtml(it), {}, false, false, 0); f.tabIndex = -1;
     const info = document.createElement('div'); info.className = 'info';
     info.innerHTML = '<b></b><small></small>';
     info.firstChild.textContent = it.title;
@@ -2293,7 +2431,7 @@ async function removeItem(id) {
 const showDeck = it => { $('vFrame').srcdoc = withNotes(deckHtml(it), it.notes, notesOn(), true, posOf(it.id)); };
 function markLook(it) {
   $('vMode').setAttribute('aria-checked', it.mode === 'dark');
-  document.querySelectorAll('#vPal button').forEach(b => b.classList.toggle('on', b.dataset.id === it.pal));
+  document.querySelectorAll('#vPal button').forEach(b => b.classList.toggle('on', b.dataset.id === palId(it.pal)));
 }
 async function changeLook(ch) {
   const it = items.find(i => i.id === openId); if (!it) return;

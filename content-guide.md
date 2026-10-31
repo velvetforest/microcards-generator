@@ -62,7 +62,7 @@ title: ...
 - `ACTION: tom-tat`: rút gọn nội dung, giữ ý cốt lõi, số liệu và điều kiện quan trọng, rồi highlight cụm then chốt. Công thức quan trọng vẫn chép đúng LaTeX, không diễn đạt lại.
 - `ACTION: giu-nguyen`: **SAO CHÉP Y HỆT, KHÔNG PHẢI TÓM TẮT.** Đây là nhiệm vụ chép lại, không được diễn đạt lại bằng lời của bạn:
   - Chép nguyên văn **từng câu, từng đoạn, từng mục** của phần tài liệu được cung cấp, đúng thứ tự, kể cả tiêu đề mục và số mục (ví dụ "2 PROBLEM STATEMENT"), số hiệu công thức, chú thích hình/bảng, trích dẫn như [1], danh sách, định nghĩa. Không bỏ câu nào, không gộp, không rút gọn, không bỏ qua phần "đã rõ".
-  - **Công thức toán chép y hệt** bằng LaTeX: trong dòng dùng `\( ... \)`, riêng dòng dùng `\[ ... \]`; giữ số hiệu công thức bằng `\tag{1}`. Mỗi biến, chỉ số trên/dưới, ký hiệu phải đúng như bản gốc. Ký tự `<` `>` `&` trong công thức viết `\lt`, `\gt`, `\&`. Ứng dụng hiển thị bằng KaTeX.
+  - **Công thức toán chép y hệt** bằng LaTeX: trong dòng dùng `\( ... \)`, riêng dòng dùng `\[ ... \]`, không dùng `$`; không bọc công thức trong `<code>`, không đặt thẻ HTML bên trong công thức, dấu nhỏ hơn viết `\lt`; trong SVG không viết LaTeX mà dùng ký tự Unicode; giữ số hiệu công thức bằng `\tag{1}`. Mỗi biến, chỉ số trên/dưới, ký hiệu phải đúng như bản gốc. Ký tự `<` `>` `&` trong công thức viết `\lt`, `\gt`, `\&`. Ứng dụng hiển thị bằng KaTeX.
   - **Bảng** chép đủ mọi hàng, cột, số liệu bằng `<table>`.
   - **Hình minh hoạ**: mọi hình phải có mặt (mục 5), ưu tiên lấy đúng hình gốc từ tệp đính kèm.
   - Số card không giới hạn, đủ chứa trọn nội dung (khoảng 120 đến 160 từ chữ mỗi card, công thức tính thêm). Đoạn dài thì sang card kế tiếp, không cắt cụt.
