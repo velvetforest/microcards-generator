@@ -1,0 +1,11 @@
+/* Panel for AiLadder.renderPanel. Colours follow the app through these variables. */
+.ladder { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--surface, rgba(127, 127, 127, .12)); }
+.ladder-title { margin: 0; font-size: 13px; font-weight: 700; color: var(--text-strong, inherit); }
+.ladder-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
+.ladder-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.ladder-state { flex: none; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ladder-state--ready { color: var(--ok, #4f9d69); }
+.ladder-state--out { color: var(--warn, #8a6fb0); }
+.ladder-state--off { color: var(--text-muted, #888); }
+.ladder-key { display: grid; gap: 4px; font-size: 12px; font-weight: 600; }
+.ladder button { justify-self: start; }

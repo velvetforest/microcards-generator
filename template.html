@@ -6,6 +6,7 @@
 <title>Micro Cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Display:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="ai-ladder.css">
 <style>
 :root{
   --bg:#F8F4EE; --panel:#FAF7F2; --surface:#F4EFEA; --white:#fff; --border:#EBDED6;
@@ -79,6 +80,7 @@ kbd{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--bo
 .tile.pending .t,.hint.shimmer{background:linear-gradient(100deg,var(--shimmer-base) 25%,var(--shimmer-base) 38%,var(--shimmer-glow) 48%,var(--shimmer-peak) 52%,var(--shimmer-base) 62%,var(--shimmer-base) 75%);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:current 1.7s linear infinite}
 @keyframes current{from{background-position:120% 0}to{background-position:-120% 0}}
 @media (prefers-reduced-motion:reduce){.tile.pending .t,.hint.shimmer{animation:none;color:var(--shimmer-peak);background:none}}
+.ladder{--text-strong:var(--strong);--text-muted:var(--muted);margin-top:12px}
 .composer{position:relative;overflow:hidden}
 .composer::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--grad);pointer-events:none}
 body::before{content:'';position:fixed;inset:0;z-index:-1;background:var(--mesh);pointer-events:none}
@@ -268,12 +270,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <input class="field" id="setModel" placeholder="Custom model name, e.g. gemini-3.8-flash" autocomplete="off" spellcheck="false" style="display:none;margin-top:8px">
   <div class="row" style="margin-top:8px"><button class="btn" id="btnModels">Load my available models</button><span class="hint" id="modelsMsg" style="margin:0"></span></div>
   <label class="chk" style="margin-top:12px"><input type="checkbox" id="setAuto"><span>Switch to another model automatically when one is busy or slow</span></label>
-  <label>Speed</label>
-  <select id="setSpeed" class="field">
-    <option value="fast">Fast (least thinking, quickest)</option>
-    <option value="balanced">Balanced (recommended)</option>
-    <option value="quality">Quality (most thinking, slowest)</option>
-  </select>
+  <div class="ladder" id="ladder"></div>
   <label>Illustrations</label>
   <select id="setIll" class="field">
     <option value="none">None (fastest, text and source figures only)</option>
@@ -376,7 +373,9 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 __STYLE_GUIDE__
 </script>
 
+<script src="ai-ladder.js"></script>
 <script>
+AiLadder.configure({ prefix: 'mc' });
 const $ = id => document.getElementById(id);
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const DEFAULT_GUIDE = $('defaultGuide').textContent.split('<\\/' + 'script').join('<' + '/script').trim();
@@ -1263,6 +1262,7 @@ $('pgOn').onchange = () => { $('pgRange').disabled = !$('pgOn').checked; if ($('
 
 async function start(action) {
   if (!store.get('gk')) { msg('Enter your Gemini API key in Settings first.'); $('btnSettings').click(); return; }
+  if (!ladderOpen()) { msg('All free models are out for now. The first one returns at ' + ladderBack() + '.'); return; }
   const pending = $('linkInput').value.trim();
   if (pending) $('linkInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
   const pasted = $('textInput').value.trim();
@@ -2218,47 +2218,37 @@ function buildDeckHtml(deck, mode) {
 // ---------- Gemini ----------
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const thinkIdxBy = {};
-const BAD_MODEL = /embedding|tts|image|live|audio|robotics|computer-use|aqa|learnlm|gemma|imagen|veo|nano|banana/i;
+const BAD_MODEL = /lite|embedding|tts|image|live|audio|robotics|computer-use|aqa|learnlm|gemma|imagen|veo|nano|banana/i;
 
+// Always high. The later entries only cover models that refuse this way of asking.
 function thinkingVariants() {
-  const sp = store.get('sp', 'balanced');
-  if (sp === 'quality') return [null];
   return [
-    { thinkingLevel: sp === 'fast' ? 'minimal' : 'low', includeThoughts: true },
-    { thinkingBudget: sp === 'fast' ? 512 : 2048, includeThoughts: true },
-    { thinkingLevel: sp === 'fast' ? 'minimal' : 'low' },
-    { thinkingBudget: sp === 'fast' ? 512 : 2048 },
+    { thinkingLevel: 'high', includeThoughts: true },
+    { thinkingBudget: 24576, includeThoughts: true },
+    { thinkingLevel: 'high' },
+    { thinkingBudget: 24576 },
     null
   ];
 }
 
 function savedModels() { try { return JSON.parse(store.get('mlist', '[]')); } catch (e) { return []; } }
 
+// The free Gemini rungs of the ladder. A model picked by hand is never swapped.
 function modelChain() {
   const primary = modelName();
-  if (store.get('autosw', '1') !== '1') return [primary];
-  const rank = m => /lite/.test(m) ? 1 : /pro/.test(m) ? 3 : /flash/.test(m) ? 0 : 2;
-  const list = savedModels().filter(m => m !== primary && !BAD_MODEL.test(m));
-  list.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
-  const fb = list.length ? list.slice(0, 6) : ['gemini-flash-latest', 'gemini-flash-lite-latest'].filter(m => m !== primary);
-  return [primary, ...fb];
+  const free = AiLadder.LADDER.filter(r => r.provider === 'gemini').map(r => r.model);
+  if (!free.includes(primary) || store.get('autosw', '1') !== '1') return [primary];
+  return [primary, ...free.filter(m => m !== primary)];
 }
 
-function parseRetryMs(m) {
-  const x = String(m).match(/retry in\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:([\d.]+)s)?/i);
-  return x ? ((+x[1] || 0) * 3600 + (+x[2] || 0) * 60 + (+x[3] || 0)) * 1000 : 0;
-}
-const exhaustedMap = () => { try { return JSON.parse(store.get('exh', '{}')); } catch (e) { return {}; } };
-function markExhausted(model, ms) { const e = exhaustedMap(); e[model] = Date.now() + ms; store.set('exh', JSON.stringify(e)); }
-const exhaustedLeft = model => Math.max(0, (exhaustedMap()[model] || 0) - Date.now());
-function fmtWait(ms) { const t = Math.round(ms / 60000), h = Math.floor(t / 60), mi = t % 60; return h ? h + 'h ' + mi + 'm' : mi + ' min'; }
+const quotaId = model => AiLadder.routeId('gemini', model, store.get('gk') || '');
+const exhaustedLeft = model => { const e = AiLadder.blockedUntil(quotaId(model)); return e ? e.until - Date.now() : 0; };
 
 const cancelErr = () => { const c = new Error('Cancelled'); c.cancelled = true; return c; };
 
 const uploadMb = snap => snap.files.reduce((n, f) => n + (f.kind === 'inline' ? f.data.length * 0.75 : 0), 0) / 1e6;
 function quietMs(snap) {
-  const base = store.get('sp', 'balanced') === 'quality' ? 90000 : 35000;
-  return base + (snap.links.length ? 20000 : 0);
+  return 90000 + (snap.links.length ? 20000 : 0);
 }
 function firstActivityMs(snap) { return quietMs(snap) + Math.min(60000, uploadMb(snap) * 8000); }
 const hedgeMs = snap => Math.round(firstActivityMs(snap) * 0.55);
@@ -2268,7 +2258,8 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
   const variants = thinkingVariants();
   let vi = Math.min(thinkIdxBy[model] || 0, variants.length - 1);
-  const t1 = firstActivityMs(snap), t2 = store.get('sp', 'balanced') === 'quality' ? 300000 : 150000;
+  const t1 = firstActivityMs(snap), t2 = 300000;
+  let shortWaits = 0;
   for (;;) {
     body.generationConfig = { temperature: snap.action === 'giu-nguyen' ? 0.15 : 0.4, maxOutputTokens: 60000 };
     if (variants[vi]) body.generationConfig.thinkingConfig = variants[vi];
@@ -2314,13 +2305,21 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
       const err = new Error('Error ' + r.status + ' (' + model + '): ' + m);
       if ([404, 429, 500, 502, 503, 504].includes(r.status)) err.retryable = true;
       if (r.status === 429) {
-        const d = parseRetryMs(m), real = (m.match(/model:\s*([\w.\-]+)/) || [])[1];
-        if (d > 300000 || /limit:\s*0\b/.test(m) || /PerDay|per day|free_tier_requests/i.test(m)) {
-          const wait = d > 300000 ? d : /limit:\s*0\b/.test(m) ? 24 * 3600000 : 6 * 3600000;
-          markExhausted(model, wait); if (real) markExhausted(real, wait);
-          err.exhausted = true; err.waitMs = wait; err.model = real || model;
-          err.message = 'Free quota used up for ' + (real || model) + ' (resets in about ' + fmtWait(wait) + ').';
+        const limit = AiLadder.readLimit('gemini', r.headers, errText, quotaId(model));
+        const noTier = /limit:\s*0\b|free_tier_requests/i.test(errText);
+        // a pause of a few seconds is waited out rather than dropping to a weaker model
+        if (!noTier && limit.scope === 'minute' && limit.seconds && limit.seconds <= 20 && shortWaits < 2) {
+          shortWaits++;
+          onStage('Waiting ' + Math.ceil(limit.seconds) + 's for the per-minute limit of ' + model + '...');
+          await sleep(limit.seconds * 1000);
+          if (signal && signal.aborted) throw cancelErr();
+          continue;
         }
+        const entry = noTier ? { until: AiLadder.nextPacificMidnight(), scope: 'day', seconds: limit.seconds } : limit;
+        const real = (m.match(/model:\s*([\w.\-]+)/) || [])[1];
+        AiLadder.block(quotaId(model), entry); if (real) AiLadder.block(quotaId(real), entry);
+        err.exhausted = true; err.model = real || model;
+        err.message = 'Free quota used up for ' + (real || model) + ' until ' + AiLadder.whenText(entry.until) + '.';
       }
       throw err;
     }
@@ -2442,15 +2441,63 @@ async function callGemini(snap, note, onStage, signal) {
   return askModels(body, snap, onStage, signal);
 }
 
-// Tries the chosen models in turn, whatever the request is for.
-async function askModels(body, snap, onStage, signal) {
-  let queue = modelChain().filter(m => !exhaustedLeft(m)).slice(0, 3);
-  if (!queue.length) {
-    const left = Math.min(...modelChain().map(exhaustedLeft));
-    throw new Error('Free quota is used up for all your selected models (resets in about ' + fmtWait(left) + '). Pick other models in Settings (Load my available models), wait, or enable billing in Google AI Studio for higher limits.');
+// The backup keys stay in this browser; they are never part of sync or a backup.
+// Decks go to Mistral only: Groq's free output is too short for a whole deck.
+const backupClient = (snap = {}) => new AiLadder.AiClient({
+  provider: 'gemini', model: AiLadder.LADDER[0].model,
+  keys: { gemini: store.get('gk'), mistral: store.get('kmistral', ''), groq: store.get('kgroq', '') },
+  only: snap.expert ? ['mistral', 'groq'] : ['mistral'],
+  temperature: snap.action === 'giu-nguyen' ? 0.15 : 0.4,
+  complete: snap.expert ? undefined : text => /^@@END/m.test(text)
+});
+const backupOpen = (snap, client = backupClient(snap)) => client.routes().length > 0 && !client.closedUntil();
+const ladderOpen = () => modelChain().some(m => !exhaustedLeft(m)) || (modelChain().length > 1 && backupOpen());
+function ladderBack() {
+  const times = modelChain().map(m => Date.now() + exhaustedLeft(m)), late = backupClient().closedUntil();
+  return AiLadder.whenText(Math.min(...times, ...(late ? [late] : [])));
+}
+
+async function pdfText(data) {
+  const pdf = await getPdfDoc({ name: 'backup', data });
+  let out = '';
+  for (let n = 1; n <= pdf.numPages; n++) out += (await (await pdf.getPage(n)).getTextContent()).items.map(x => x.str).join(' ') + '\n\n';
+  return out;
+}
+
+// Only Gemini reads a PDF itself, so the others get its text, without the pictures.
+// Keep original must not lose anything, so there it stops instead. Returns null
+// when this request cannot go to a backup at all.
+async function askBackup(body, snap, onStage, signal) {
+  const client = backupClient(snap);
+  if (!backupOpen(snap, client)) return null;
+  const parts = [];
+  let note = '';
+  for (const part of body.contents.flatMap(c => c.parts)) {
+    if (part.inline_data && part.inline_data.mime_type === 'application/pdf') {
+      if (snap.action === 'giu-nguyen') return null;
+      const text = await pdfText(part.inline_data.data);
+      if (!text.trim()) return null;                 // a scan has no text layer
+      note = 'Read from the text of the PDF, without its pictures' + (text.length > AiLadder.PROVIDERS.mistral.chars ? ', and only its first part' : '');
+      parts.push({ text });
+    } else parts.push(part);
   }
+  const { messages, geminiOnly } = AiLadder.fromGeminiBody(Object.assign({}, body, { contents: [{ role: 'user', parts }] }));
+  if (geminiOnly) return null;
+  let model = '';
+  const text = await client.chat(messages, {
+    signal, strict: snap.action === 'giu-nguyen' || !!snap.expert,
+    onStatus: line => onStage(line, { model: 'backup', t: {}, phase: null, since: 0 }),
+    onRoute: route => { model = route.label; }
+  });
+  onStage(model + ' is writing...', { model, t: {}, phase: null, since: 0 });
+  return { text, model, note, truncated: !snap.expert && !/^@@END/m.test(text) };
+}
+
+// Tries the chosen models in turn, then a backup provider, whatever the request is for.
+async function askModels(body, snap, onStage, signal) {
+  let queue = modelChain().filter(m => !exhaustedLeft(m));
   let lastErr = null;
-  for (let round = 0; round < 2; round++) {
+  for (let round = 0; round < 2 && queue.length; round++) {
     try { return await runRound(queue, body, snap, onStage, signal); }
     catch (e) {
       if (e.cancelled || !e.retryable) throw e;
@@ -2460,6 +2507,17 @@ async function askModels(body, snap, onStage, signal) {
       if (round === 0) { onStage('Models are busy. Retrying in 5s...'); await sleep(5000); }
     }
   }
+  // a model the reader picked by hand is never swapped
+  if (modelChain().length > 1) {
+    try {
+      const res = await askBackup(body, snap, onStage, signal);
+      if (res) return res;
+    } catch (e) {
+      if (signal && signal.aborted) throw cancelErr();
+      throw new Error('Gemini is out, and the backup failed too: ' + (e.message || e));
+    }
+  }
+  if (modelChain().length > 1 && !modelChain().some(m => !exhaustedLeft(m))) throw new Error('All free models are out for now. The first one returns at ' + ladderBack() + '.');
   throw lastErr || new Error('Could not reach Gemini.');
 }
 
@@ -2549,7 +2607,7 @@ function expertParts(ex, title, body, note, notice) {
   return parts;
 }
 async function askExpert(kind, title, body, onStage, notice) {
-  const ex = EXPERTS[kind], snap = { files: [], links: [], action: 'tom-tat' };
+  const ex = EXPERTS[kind], snap = { files: [], links: [], action: 'tom-tat', expert: true };
   const once = async note => {
     const req = { system_instruction: { parts: [{ text: EXPERT_RULES }] }, contents: [{ role: 'user', parts: expertParts(ex, title, body, note, notice) }] };
     const { text, model } = await askModels(req, snap, onStage);
@@ -2683,9 +2741,9 @@ async function run(job) {
     const dgs = job.snapshot.diagrams || {};
     let deck = null, html = null, note = '', warn = '';
     for (let attempt = 0; attempt < 2; attempt++) {
-      const { text, truncated, model: usedModel, timing } = await callGemini(job.snapshot, note, setStage, job.abort.signal);
+      const { text, truncated, model: usedModel, timing, note: sourceNote } = await callGemini(job.snapshot, note, setStage, job.abort.signal);
       job.used = { model: usedModel, timing };
-      deck = parseDeck(text); html = null; warn = '';
+      deck = parseDeck(text); html = null; warn = sourceNote || '';
       let all;
       if (deck) {
         if (truncated && !deck.ended) {
@@ -2850,7 +2908,7 @@ function renderGrid() {
     const info = document.createElement('div'); info.className = 'info';
     info.innerHTML = '<b></b><small></small>';
     info.firstChild.textContent = it.title;
-    info.lastChild.textContent = `${it.action === 'tom-tat' ? 'Summarize' : 'Keep original'} · ${it.mode === 'dark' ? 'Dark' : 'Light'} · ${new Date(it.created).toLocaleDateString('en-US')}${it.warn ? ' · ⚠ ' + it.warn : ''}`;
+    info.lastChild.textContent = `${it.action === 'tom-tat' ? 'Summarize' : 'Keep original'} · ${it.mode === 'dark' ? 'Dark' : 'Light'} · ${new Date(it.created).toLocaleDateString('en-US')}${it.gen ? ' · ' + it.gen.model : ''}${it.warn ? ' · ⚠ ' + it.warn : ''}`;
     if (it.gen) t.title = it.gen.model + ' · total ' + fmtSec(it.gen.total) + (phaseLine(it.gen.t) ? ' (' + phaseLine(it.gen.t) + ')' : '');
     t.append(f, info, iconBtn('ren', 'Rename', '&#9998;', () => renameItem(it.id)), iconBtn('del', 'Delete', '&times;', () => removeItem(it.id)));
     t.onclick = () => openItem(it.id);
@@ -3510,7 +3568,7 @@ function renderSecBody() {
     on
       ? 'Sync is on, so an encrypted copy of your library sits in the vault on this site\'s server.'
       : 'Sync is off, so nothing from your library has been sent to any server.',
-    ['When this page does talk to the internet', 'Only when you ask it to. Pressing Summarize or Keep original sends your sources to Google\'s Gemini API with your own API key' + (on ? ', and syncing sends encrypted blocks to this site.' : '. Nothing else leaves this device.')]
+    ['When this page does talk to the internet', 'Only when you ask it to. Pressing Summarize or Keep original sends your sources to Google\'s Gemini API with your own API key. If Gemini runs out and you added a backup key, they go to Mistral or Groq instead' + (on ? ', and syncing sends encrypted blocks to this site.' : '. Nothing else leaves this device.')]
   ]);
   specHowto(first, 'Check for yourself what this page sends', [
     ['Open the developer tools: ', 'F12', ' or ', 'Ctrl Shift I', '. On a Mac it is ', '⌥ ⌘ I', '.'],
@@ -3589,7 +3647,7 @@ $('btnModels').onclick = async () => {
 $('btnSettings').onclick = () => {
   $('setKey').value = store.get('gk', '');
   $('setModel').value = modelName();
-  $('setSpeed').value = store.get('sp', 'balanced');
+  AiLadder.renderPanel($('ladder'), { provider: 'gemini', model: modelName(), keys: { gemini: store.get('gk', ''), mistral: store.get('kmistral', ''), groq: store.get('kgroq', '') } }, { input: 'field', button: 'btn' });
   $('setAuto').checked = store.get('autosw', '1') === '1';
   $('setIll').value = store.get('ill', 'simple');
   $('setFs').checked = store.get('fs', '0') === '1';
@@ -3602,7 +3660,9 @@ $('btnResetGuide').onclick = () => { $('setGuide').value = DEFAULT_GUIDE; };
 $('btnSaveSettings').onclick = () => {
   store.set('gk', $('setKey').value.trim());
   store.set('gm', $('setModel').value.trim() || 'gemini-3.8-flash');
-  store.set('sp', $('setSpeed').value); store.set('autosw', $('setAuto').checked ? '1' : '0'); store.set('ill', $('setIll').value); store.set('fs', $('setFs').checked ? '1' : '0');
+  const backups = AiLadder.panelKeys($('ladder'));
+  store.set('kmistral', backups.mistral || ''); store.set('kgroq', backups.groq || '');
+  store.set('autosw', $('setAuto').checked ? '1' : '0'); store.set('ill', $('setIll').value); store.set('fs', $('setFs').checked ? '1' : '0');
   Object.keys(thinkIdxBy).forEach(k => delete thinkIdxBy[k]);
   const g = $('setGuide').value.trim();
   store.set('gg', g === DEFAULT_GUIDE ? '' : g);

@@ -3,4 +3,4 @@ sed 's#</script#<\\/script#g' content-guide.md > .guide.tmp
 sed -e '/__STYLE_GUIDE__/{r .guide.tmp' -e 'd}' template.html > index.html
 rm -f .guide.tmp
 mkdir -p public
-cp index.html public/index.html
+cp index.html ai-ladder.js ai-ladder.css public/
