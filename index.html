@@ -1095,6 +1095,33 @@ function figFit() {
     });
   }
 
+  // A picture or drawing on a card opens large over the deck, Notion style:
+  // × closes it, and so do Esc and a click beside it.
+  function lightbox() {
+    var box = document.createElement('div'), stage = document.createElement('div'), close = document.createElement('button');
+    box.className = 'lb'; box.hidden = true; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Picture');
+    stage.className = 'lb-stage';
+    close.type = 'button'; close.className = 'lb-x'; close.textContent = '×'; close.setAttribute('aria-label', 'Close');
+    box.appendChild(stage); box.appendChild(close); document.body.appendChild(box);
+    var back = null;
+    function shut() { if (box.hidden) return; box.hidden = true; stage.replaceChildren(); if (back) back.focus(); }
+    function open(el) {
+      var copy = el.cloneNode(true);
+      copy.removeAttribute('style'); copy.removeAttribute('width'); copy.removeAttribute('height');
+      copy.classList.add('lb-pic');
+      stage.replaceChildren(copy); box.hidden = false; back = el; close.focus();
+    }
+    close.onclick = shut;
+    box.addEventListener('click', function (e) { if (e.target === box || e.target === stage) shut(); });
+    addEventListener('keydown', function (e) { if (e.key === 'Escape' && !box.hidden) { e.stopImmediatePropagation(); e.preventDefault(); shut(); } }, true);
+    document.addEventListener('click', function (e) {
+      if (document.documentElement.classList.contains('sv-on')) return;   // picking cards to solve
+      var el = e.target.closest && e.target.closest('.card-body .fig-img, .card-body .illus svg, .card-body .illus-fill svg, .sv-cols img, .sv-cols svg, .xp-body svg');
+      if (!el || el.closest('.lb')) return;
+      e.preventDefault(); e.stopPropagation(); open(el);
+    });
+  }
+
   function frames() {
     document.querySelectorAll('.card-body .fig-img').forEach(function (img) {
       var frame = img.closest('.illus-fill, .illus');
@@ -1156,7 +1183,7 @@ function figFit() {
       }, true);
       addEventListener('keydown', function (e) { if (e.key === 'Escape' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) parent.postMessage({ mc: 'unfull' }, '*'); });
     }
-    experts(); frames(); unspill();
+    experts(); frames(); unspill(); lightbox();
     [600, 1500, 3000].forEach(function (ms) { setTimeout(unspill, ms); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(later);
   });
@@ -1168,6 +1195,12 @@ const FIG_FIT = '<style>:root{--shimmer-base:var(--text-muted);--shimmer-glow:va
   '@media (prefers-reduced-motion:reduce){.xp-btn:disabled,.sv-state:not(.sv-bad){animation:none;color:var(--shimmer-peak);background:none}}</style>' +
   '<style>.illus-fill{position:relative}.illus-fill>.fig-img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain;background:transparent}' +
   '.fig-grow{height:auto!important;flex:none!important;min-height:0!important}' +
+  '.card-body .fig-img,.card-body .illus svg,.card-body .illus-fill svg,.sv-cols img,.sv-cols svg,.xp-body svg{cursor:zoom-in}' +
+  '.lb{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:56px 20px 20px;background:rgba(15,13,14,.82);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}.lb[hidden]{display:none}' +
+  '.lb-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:auto}' +
+  '.lb-pic{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;background:#fff;border-radius:10px;box-shadow:0 18px 48px rgba(0,0,0,.45);cursor:auto}' +
+  'svg.lb-pic{width:min(100%,1100px);height:auto;max-height:100%;padding:16px;background:var(--card-bg)}' +
+  '.lb-x{position:absolute;top:12px;right:14px;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font-size:22px;line-height:1;cursor:pointer}.lb-x:hover{background:rgba(255,255,255,.22)}' +
   '.illus-fill.fig-fit{flex:none;align-self:center;max-width:100%;min-height:0;justify-content:center;align-items:center}.fig-fit>.fig-img{position:static;inset:auto;flex:none;max-width:100%}' +
   '.fig-grow .fig-img,.fig-flow{position:static!important;width:100%!important;height:auto!important}' +
   // only the big picture frame gives way when a card is full; the rest keep their height and the card scrolls
@@ -2055,15 +2088,19 @@ function snapBox(cv, core, pics, texts, words) {
   const rx = Math.max(2, Math.round(W * 0.0125 / st)), ry = Math.max(2, Math.round(H * 0.007 / st));
   // a block far larger than the hint is the figure grown into its surroundings
   const maxArea = Math.min(Math.max(boxArea(hint) * 6, 1), g.gw * g.gh * 0.7), near = g.gw * 0.07;
-  const pick = (grid, nearY) => pickBlocks(inkBlocks(grid, rx, ry), hint, maxArea, near, 1.6, nearY) || pickBlocks(inkBlocks(stripRules(grid), rx, ry), hint, maxArea, near, 1.6, nearY);
+  const pick = (grid, nearY, nearX = near) => pickBlocks(inkBlocks(grid, rx, ry), hint, maxArea, nearX, 1.6, nearY) || pickBlocks(inkBlocks(stripRules(grid), rx, ry), hint, maxArea, nearX, 1.6, nearY);
   // On a slide the bullet lines are short, so they cannot be told from labels
   // by length, and a figure next to them merged with them into one block too
   // big to keep. So the figure is found from its lines, shapes and pictures
   // alone, and then takes back the text sitting against it: its labels.
   let found = null;
   if (words && words.length) {
-    // beside a picture, a table border or frame is not part of the figure
-    found = pick(picBox ? stripRules(erase(g, words)) : erase(g, words), g.gh * 0.07);
+    const plain = erase(g, words);
+    found = pick(plain, g.gh * 0.07);
+    // beside a picture, a table border or frame would pull in the body text it
+    // holds: then the borders are dropped and the figure found again
+    const prose = f => f && (texts || []).some(l => { const c = l.map(v => v / st); return boxArea(boxMeet(c, f.box)) > 0.5 * boxArea(c); });
+    if (picBox && prose(found)) found = pick(stripRules(plain), g.gh * 0.07) || found;
     if (found) {
       const b = found.box, mx = g.gw * 0.015, my = g.gh * 0.015, long = texts || [];
       for (const w of words) {
