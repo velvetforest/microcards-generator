@@ -177,6 +177,7 @@ h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
 .tile:hover .ren{opacity:1}
 .crumb{display:flex;align-items:center;gap:10px;margin:32px 0 14px;flex-wrap:wrap}
 .crumb h2{margin:0}
+.crumb .sortsel{width:auto;margin-left:auto}
 .crumb .back{border:0;background:transparent;color:var(--deep);font-weight:700;font-size:14px;padding:0}
 .empty{color:var(--muted);font-size:14px;padding:30px 0;text-align:center;grid-column:1/-1}
 dialog{border:1px solid var(--border);border-radius:20px;background:var(--panel);color:var(--text);padding:22px;width:min(640px,94vw);font-family:inherit}
@@ -1300,8 +1301,9 @@ async function start(action) {
   // anything typed or linked alongside the files still deserves its own deck
   if (split && (pasted || usedLinks.length)) parts.push({ part: { files: [], links: usedLinks, text: pasted }, orig: { links: usedLinks, text: pasted } });
 
-  const made = parts.map(({ part, orig }) => {
-    const snapshot = Object.assign({}, common, part);
+  const addedAt = Date.now();
+  const made = parts.map(({ part, orig }, n) => {
+    const snapshot = Object.assign({}, common, part, { added: addedAt + n });
     snapshot.diagrams = extractDiagrams(snapshot);
     return { id: uuid(), status: 'run', snapshot, orig };
   });
@@ -2786,7 +2788,7 @@ async function run(job) {
     }
     const item = {
       id: job.id, created: Date.now(), updated: Date.now(), html, folderId: fid, title,
-      mode: job.snapshot.mode, pal: job.snapshot.cardPal, action: job.snapshot.action, warn,
+      mode: job.snapshot.mode, pal: job.snapshot.cardPal, action: job.snapshot.action, warn, added: job.snapshot.added,
       gen: job.used ? { model: job.used.model, t: job.used.timing, total: Date.now() - job.t0 } : null
     };
     await dbPut('items', item);
@@ -2843,6 +2845,20 @@ function jobTile(j) {
   return t;
 }
 
+// Card sets in a folder: newest first, or in the order their sources were added.
+// One deck per file finishes out of order, so that order is kept when they start.
+const addedOf = it => it.added || it.created || 0;
+const SORTS = { newest: ['Newest first', (a, b) => addedOf(b) - addedOf(a)], added: ['Order added', (a, b) => addedOf(a) - addedOf(b)] };
+const sortSets = list => list.slice().sort(SORTS[SORTS[store.get('sort')] ? store.get('sort') : 'newest'][1]);
+function sortPicker() {
+  const sel = document.createElement('select');
+  sel.className = 'field sortsel'; sel.title = 'Sort card sets'; sel.setAttribute('aria-label', 'Sort card sets');
+  Object.keys(SORTS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = SORTS[k][0]; sel.appendChild(o); });
+  sel.value = SORTS[store.get('sort')] ? store.get('sort') : 'newest';
+  sel.onchange = () => { store.set('sort', sel.value); renderGrid(); };
+  return sel;
+}
+
 function renderCrumb() {
   const c = $('crumb'); c.innerHTML = '';
   if (!curFolder) {
@@ -2858,13 +2874,13 @@ function renderCrumb() {
     const h = document.createElement('h2'); h.textContent = '/ Unfiled';
     const n = document.createElement('span'); n.className = 'hint'; n.style.margin = '0';
     n.textContent = 'Card sets whose folder is gone. Open one and pick a folder to move it.';
-    c.append(back, h, n); return;
+    c.append(back, h, n, sortPicker()); return;
   }
   const f = folders.find(x => x.id === curFolder);
   const h = document.createElement('h2'); h.textContent = '/ ' + f.name;
   const r = document.createElement('button'); r.className = 'btn'; r.textContent = 'Rename folder';
   r.onclick = () => renameFolder(f.id);
-  c.append(back, h, r);
+  c.append(back, h, r, sortPicker());
 }
 
 function renderFolderSel() {
@@ -2900,7 +2916,7 @@ function renderGrid() {
     return;
   }
   jobs.filter(j => j.snapshot.folderId === curFolder).forEach(j => g.appendChild(jobTile(j)));
-  const list = curFolder === UNFILED ? unfiled() : items.filter(i => i.folderId === curFolder);
+  const list = sortSets(curFolder === UNFILED ? unfiled() : items.filter(i => i.folderId === curFolder));
   list.forEach(it => {
     const t = document.createElement('div'); t.className = 'tile';
     const f = document.createElement('iframe');
