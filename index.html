@@ -1992,10 +1992,12 @@ function snapBox(cv, core, pics, texts) {
   // with nothing to snap to, err on the side of too much rather than cut the figure
   const loose = () => clampBox([core[0] - H * 0.05, core[1] - W * 0.05, core[2] + H * 0.05, core[3] + W * 0.05]);
 
-  // a pasted picture: logos and full-page scans aside, its own frame is the crop
+  // a pasted picture: logos and full-page scans aside, its own frame is the crop.
+  // Only when the pictures are most of what the hint points at: small ones inside
+  // a drawing, like the computers in a network diagram, are part of the drawing.
   const ps = (pics || []).map(clampBox).filter(r => boxArea(r) > W * H * 0.004 && boxArea(r) < W * H * 0.8);
   const hit = pickBlocks(ps, core, Infinity, W * 0.07, Infinity);
-  if (hit && boxArea(boxMeet(hit.main, core)) >= 0.3 * Math.min(boxArea(hit.main), boxArea(core))) {
+  if (hit && boxArea(boxMeet(hit.main, core)) >= 0.3 * Math.min(boxArea(hit.main), boxArea(core)) && boxArea(boxMeet(hit.box, core)) >= 0.4 * boxArea(core)) {
     const pp = Math.round(Math.min(W, H) * 0.004), b = hit.box;
     return clampBox([b[0] - pp, b[1] - pp, b[2] + pp, b[3] + pp]);
   }
