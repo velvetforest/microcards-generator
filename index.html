@@ -159,7 +159,7 @@ h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
 .tile .info{position:absolute;left:0;right:0;bottom:0;padding:34px 12px 10px;background:linear-gradient(transparent,rgba(44,42,41,.82));color:#fff}
 .tile .info b{display:block;font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tile .info small{font-size:11px;opacity:.85}
-.tile .del,.tile .ren{position:absolute;top:8px;right:8px;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--border);background:var(--white);color:var(--deep);opacity:0;transition:opacity .15s,border-color .15s;cursor:pointer}
+.tile .del,.tile .ren{position:absolute;top:8px;right:8px;width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--border);background:var(--white);color:var(--deep);opacity:0;transition:opacity .15s,border-color .15s;cursor:pointer}
 .tile .del:hover,.tile .ren:hover{border-color:var(--deep)}
 .tile:hover .del{opacity:1}
 .tile.pending,.tile.error{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:16px;cursor:default}
@@ -174,8 +174,8 @@ h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
 .fo-sheen{display:none}
 .tile.folder .fn{font-size:14px;font-weight:700;color:var(--strong);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .tile.folder small{font-size:11px;color:var(--deep)}
-.tile .ren{right:44px}
-.tile button.del svg,.tile button.ren svg{width:15px;height:15px}
+.tile .ren{right:50px}
+.tile button.del svg,.tile button.ren svg{width:18px;height:18px}
 .tile:hover .ren{opacity:1}
 .crumb{display:flex;align-items:center;gap:10px;margin:32px 0 14px;flex-wrap:wrap}
 .crumb h2{margin:0}
@@ -209,9 +209,10 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 #viewer.pfull{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0;inset:0}
 #viewer.pfull .bar,#viewer.pfull #vClose{display:none}
 #viewer .bar{padding-right:60px}
-#vExit{display:none;position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:5;width:36px;height:36px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;line-height:1;padding:0}
+#vExit{display:none;position:fixed;top:max(10px,env(safe-area-inset-top));right:12px;z-index:5;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--white);color:var(--deep);padding:0;cursor:pointer}
+#vExit:hover{border-color:var(--deep)}
 #viewer.pfull #vExit{display:flex;align-items:center;justify-content:center}
-@media (max-width:700px){#vExit{top:auto;bottom:max(14px,env(safe-area-inset-bottom));right:14px;width:44px;height:44px;font-size:24px}}
+@media (max-width:700px){#vExit{top:auto;bottom:max(14px,env(safe-area-inset-bottom));right:14px}}
 @media (max-width:560px){
   .hdr{gap:8px}
   header{flex-wrap:wrap;gap:10px}
@@ -371,7 +372,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
     <button class="btn" id="vDownload">Download</button>
     <button class="btn danger" id="vDelete">Delete</button>
   </div>
-  <button id="vExit" aria-label="Exit full screen" title="Exit full screen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button id="vExit" aria-label="Exit full screen" title="Exit full screen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   <iframe id="vFrame" sandbox="allow-scripts" allow="fullscreen"></iframe>
 </dialog>
 
@@ -3219,7 +3220,7 @@ const FOLDER_SVG = '<svg viewBox="0 0 96 96" aria-hidden="true"><defs><linearGra
   '<path class="fo-fill" d="' + FOLDER_PATH + '" style="fill:var(--c)"/><path class="fo-sheen" d="' + FOLDER_PATH + '" fill="url(#foB)"/></svg>';
 
 // drawn, not typed: a character sits off centre in most fonts
-const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const ICON_X = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 const ICON_PEN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>';
 function iconBtn(cls, label, html, fn) {
   const b = document.createElement('button'); b.className = cls; b.title = label; b.innerHTML = html;
