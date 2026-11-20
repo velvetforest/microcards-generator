@@ -3,9 +3,9 @@ import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import './ai-ladder.js';
 
-const { AiClient, LADDER, PROVIDERS, block, blockedUntil, clearBlocks, fromGeminiBody, ladderState, nextPacificMidnight, readLimit, routeId, whenText } = globalThis.AiLadder;
+const { AiClient, LADDER, PROVIDERS, block, blockedUntil, clearBlocks, forgetModels, fromGeminiBody, ladder, ladderState, nextPacificMidnight, noteSwap, onLadder, readLimit, refreshModels, routeId, whenText } = globalThis.AiLadder;
 
-beforeEach(clearBlocks);
+beforeEach(() => { clearBlocks(); forgetModels(); });
 
 const keys = { gemini: 'g-key-111111', mistral: 'm-key-222222', groq: 'q-key-333333' };
 const client = (overrides = {}) => new AiClient({ provider: 'gemini', model: 'gemini-3.8-flash', keys, minGapMs: 0, ...overrides });
@@ -180,4 +180,84 @@ test('a time today shows the clock, and another day adds the date', () => {
   const now = new Date(2026, 10, 2, 9, 0).getTime();
   assert.ok(!whenText(new Date(2026, 10, 2, 14, 30).getTime(), now).includes('/'));
   assert.ok(whenText(new Date(2026, 10, 3, 14, 30).getTime(), now).includes('/'));
+});
+
+// ---------- live model lists ----------
+
+const listsServe = (lists) => {
+  const asked = [];
+  globalThis.fetch = async (url, init) => {
+    asked.push(String(url));
+    if (String(url).includes('generativelanguage')) return Response.json({ models: lists.gemini.map((id) => ({ name: `models/${id}`, supportedGenerationMethods: ['generateContent'] })) });
+    if (String(url).includes('mistral')) return Response.json({ data: lists.mistral.map((id) => ({ id })) });
+    return Response.json({ data: lists.groq.map((id) => ({ id, active: true })) });
+  };
+  return asked;
+};
+const today = { gemini: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-flash-lite', 'text-embedding-004'], mistral: ['mistral-large-latest'], groq: ['qwen/qwen3.8-27b'] };
+
+test('with no list yet, the ladder is the written one', () => {
+  assert.deepEqual(ladder().map((rung) => rung.model), LADDER.map((rung) => rung.model));
+});
+
+test('a rung its provider no longer lists is dropped', async () => {
+  listsServe({ ...today, gemini: today.gemini.filter((id) => id !== 'gemini-3.6-flash') });
+  await refreshModels(keys);
+  assert.ok(!ladder().some((rung) => rung.model === 'gemini-3.6-flash'));
+  assert.ok(ladder().some((rung) => rung.model === 'gemini-3.8-flash'));
+});
+
+test('a newer Flash and a newer Pro join above their kind, lite models stay out', async () => {
+  listsServe({ ...today, gemini: [...today.gemini, 'gemini-4-flash-preview', 'gemini-4-flash-preview-11-2026', 'gemini-4.2-pro', 'gemini-4.5-flash-lite'] });
+  await refreshModels(keys);
+  const models = ladder().map((rung) => rung.model);
+  assert.equal(models[0], 'gemini-4-flash-preview');
+  assert.equal(ladder()[0].label, 'Gemini 4 Flash');
+  assert.ok(models.indexOf('gemini-4.2-pro') === models.indexOf('gemini-3.1-pro-preview') - 1);
+  assert.ok(!models.some((id) => /lite|dated|11-2026/.test(id)));
+  const seen = serve(() => answer('ok'));
+  await client().chat([]);
+  assert.equal(seen[0].model, 'gemini-4-flash-preview');
+});
+
+test('a rung picked below the top still leads', async () => {
+  listsServe({ ...today, gemini: [...today.gemini, 'gemini-4-flash'] });
+  await refreshModels(keys);
+  const seen = serve(() => answer('ok'));
+  await client({ model: 'gemini-3-flash-preview' }).chat([]);
+  assert.equal(seen[0].model, 'gemini-3-flash-preview');
+});
+
+test('a saved model that left the ladder still runs it, from the top', async () => {
+  listsServe({ ...today, gemini: ['gemini-4-flash', 'gemini-3.1-pro-preview'] });
+  await refreshModels(keys);
+  assert.ok(onLadder('gemini', 'gemini-3.8-flash'));
+  const seen = serve(() => answer('ok'));
+  await client().chat([]);
+  assert.equal(seen[0].model, 'gemini-4-flash');
+});
+
+test('lists are fetched once a day per key, and a failed fetch keeps the ladder', async () => {
+  const asked = listsServe(today);
+  await refreshModels(keys);
+  await refreshModels(keys);
+  assert.equal(asked.length, 3);
+  globalThis.fetch = async () => { throw new Error('offline'); };
+  await refreshModels({ ...keys, gemini: 'another-key-999999' });
+  assert.ok(ladder().some((rung) => rung.model === 'gemini-3.8-flash'));
+});
+
+test('a 404 that names a replacement moves to it at once, and remembers', async () => {
+  const gone = () => new Response(JSON.stringify({ error: { code: 404, message: 'This model models/gemini-3.8-flash is no longer available to new users. Please update your code to use models/gemini-3.9-flash for the latest features.' } }), { status: 404 });
+  const seen = serve((model) => (model === 'gemini-3.8-flash' ? gone() : answer('ok')));
+  assert.equal(await client().chat([]), 'ok');
+  assert.deepEqual(seen.map((call) => call.model), ['gemini-3.8-flash', 'gemini-3.9-flash']);
+  assert.equal(ladder()[0].model, 'gemini-3.9-flash');
+  assert.equal(ladder()[0].label, 'Gemini 3.9 Flash');
+});
+
+test('a replacement is read only from its own words', () => {
+  assert.equal(noteSwap('gemini', 'gemini-2.5-pro', 'This model is no longer available to new users.'), null);
+  assert.equal(noteSwap('gemini', 'gemini-2.5-pro', 'Please use models/gemini-3.1-pro-preview instead.'), 'gemini-3.1-pro-preview');
+  assert.equal(noteSwap('gemini', 'gemini-2.5-pro', 'Please use the Interactions API.'), null);
 });

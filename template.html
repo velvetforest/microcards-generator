@@ -6,7 +6,7 @@
 <title>Micro Cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Display:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="ai-ladder.css">
+<link rel="stylesheet" href="ai-ladder.css?v=2">
 <style>
 :root{
   --bg:#F8F4EE; --panel:#FAF7F2; --surface:#F4EFEA; --white:#fff; --border:#EBDED6;
@@ -380,7 +380,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 __STYLE_GUIDE__
 </script>
 
-<script src="ai-ladder.js"></script>
+<script src="ai-ladder.js?v=3"></script>
 <script>
 AiLadder.configure({ prefix: 'mc' });
 const $ = id => document.getElementById(id);
@@ -2482,13 +2482,20 @@ function thinkingVariants() {
 
 function savedModels() { try { return JSON.parse(store.get('mlist', '[]')); } catch (e) { return []; } }
 
-// The free Gemini rungs of the ladder. A model picked by hand is never swapped.
+// The free Gemini rungs of the ladder, as Google lists them today. A model
+// picked by hand is never swapped; a ladder model Google has retired gives way.
 function modelChain() {
   const primary = modelName();
-  const free = AiLadder.LADDER.filter(r => r.provider === 'gemini').map(r => r.model);
-  if (!free.includes(primary) || store.get('autosw', '1') !== '1') return [primary];
+  const free = AiLadder.ladder().filter(r => r.provider === 'gemini').map(r => r.model);
+  if (!AiLadder.onLadder('gemini', primary) || store.get('autosw', '1') !== '1') return [primary];
+  // the default top rung follows the ladder, so a newer model leads; another rung picked leads
+  if (primary === AiLadder.LADDER[0].model || !free.includes(primary)) return free;
   return [primary, ...free.filter(m => m !== primary)];
 }
+const allKeys = () => ({ gemini: store.get('gk', ''), mistral: store.get('kmistral', ''), groq: store.get('kgroq', '') });
+// once a day, a few seconds at most; a failure leaves the ladder as it was
+const refreshModels = () => AiLadder.refreshModels(allKeys()).catch(() => {});
+setTimeout(refreshModels, 4000);
 
 const quotaId = model => AiLadder.routeId('gemini', model, store.get('gk') || '');
 const exhaustedLeft = model => { const e = AiLadder.blockedUntil(quotaId(model)); return e ? e.until - Date.now() : 0; };
@@ -2553,6 +2560,13 @@ async function streamOnce(model, body, snap, onStage, signal, onActive) {
       if (r.status === 400 && /think|thought/i.test(m) && vi < variants.length - 1) { vi++; thinkIdxBy[model] = vi; continue; }
       const err = new Error('Error ' + r.status + ' (' + model + '): ' + m);
       if ([404, 429, 500, 502, 503, 504].includes(r.status)) err.retryable = true;
+      // a retired model is left for a day; when Google names its successor, that is tried
+      if (r.status === 404) {
+        const to = AiLadder.noteSwap('gemini', model, m);
+        AiLadder.block(quotaId(model), { until: Date.now() + 24 * 3600e3, scope: 'gone' });
+        err.exhausted = true;
+        err.message = model + ' is no longer offered by Google' + (to ? '; moving to ' + to : '') + '.';
+      }
       if (r.status === 429) {
         const limit = AiLadder.readLimit('gemini', r.headers, errText, quotaId(model));
         const noTier = /limit:\s*0\b|free_tier_requests/i.test(errText);
@@ -2744,6 +2758,7 @@ async function askBackup(body, snap, onStage, signal) {
 
 // Tries the chosen models in turn, then a backup provider, whatever the request is for.
 async function askModels(body, snap, onStage, signal) {
+  await refreshModels();
   let queue = modelChain().filter(m => !exhaustedLeft(m));
   let lastErr = null;
   for (let round = 0; round < 2 && queue.length; round++) {
@@ -2751,7 +2766,8 @@ async function askModels(body, snap, onStage, signal) {
     catch (e) {
       if (e.cancelled || !e.retryable) throw e;
       lastErr = e;
-      queue = queue.filter(m => !exhaustedLeft(m));
+      // a successor named by a 404 joins the queue
+      queue = [...new Set([...queue, ...modelChain()])].filter(m => !exhaustedLeft(m));
       if (!queue.length) break;
       if (round === 0) { onStage('Models are busy. Retrying in 5s...'); await sleep(5000); }
     }
@@ -3916,7 +3932,9 @@ $('btnModels').onclick = async () => {
 $('btnSettings').onclick = () => {
   $('setKey').value = store.get('gk', '');
   $('setModel').value = modelName();
-  AiLadder.renderPanel($('ladder'), { provider: 'gemini', model: modelName(), keys: { gemini: store.get('gk', ''), mistral: store.get('kmistral', ''), groq: store.get('kgroq', '') } }, { input: 'field', button: 'btn' });
+  const ladderPanel = () => AiLadder.renderPanel($('ladder'), { provider: 'gemini', model: modelName(), keys: allKeys() }, { input: 'field', button: 'btn' });
+  ladderPanel();
+  refreshModels().then(ladderPanel);
   $('setAuto').checked = store.get('autosw', '1') === '1';
   $('setIll').value = store.get('ill', 'simple');
   $('setFs').checked = store.get('fs', '0') === '1';

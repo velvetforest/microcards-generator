@@ -53,7 +53,135 @@
     { provider: 'groq', model: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', effort: THINKING },
   ];
 
-  const onLadder = (provider, model) => LADDER.some((rung) => rung.provider === provider && rung.model === model);
+  /* ---------- live model lists ---------- */
+
+  // Providers retire models and add new ones, so the ladder above is only where to start.
+  // Each key's own list of models is fetched once a day: a rung its provider no longer lists
+  // is dropped, and a Gemini Flash or Pro newer than every rung of its kind joins just above
+  // them. A 404 that names a replacement is remembered and the replacement takes the rung.
+  // The lists say nothing of free quota or quality: a new model with no free tier is
+  // simply found out by its first call, like any model that runs out.
+  const LIST_AGE = 24 * 60 * MINUTE;
+  const LISTS = {
+    gemini: {
+      url: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',
+      headers: (key) => ({ 'x-goog-api-key': key }),
+      ids: (body) => (body.models ?? []).filter((m) => (m.supportedGenerationMethods ?? []).includes('generateContent')).map((m) => String(m.name).replace(/^models\//, '')),
+    },
+    mistral: {
+      url: 'https://api.mistral.ai/v1/models',
+      headers: (key) => ({ Authorization: `Bearer ${key}` }),
+      ids: (body) => (body.data ?? []).filter((m) => !m.archived).flatMap((m) => [m.id, ...(m.aliases ?? [])]),
+    },
+    groq: {
+      url: 'https://api.groq.com/openai/v1/models',
+      headers: (key) => ({ Authorization: `Bearer ${key}` }),
+      ids: (body) => (body.data ?? []).filter((m) => m.active !== false).map((m) => m.id),
+    },
+  };
+
+  const memory = {};
+  const kept = (name) => {
+    if (!memory[name]) {
+      try {
+        memory[name] = JSON.parse(localStorage.getItem(`${options.prefix}.${name}`)) ?? {};
+      } catch {
+        memory[name] = {};
+      }
+    }
+    return memory[name];
+  };
+  const keep = (name) => {
+    try {
+      localStorage.setItem(`${options.prefix}.${name}`, JSON.stringify(memory[name]));
+    } catch { /* still known until the page closes */ }
+  };
+
+  // Fetches the lists that are missing or a day old, a few seconds at most. A failed
+  // fetch changes nothing: the ladder then stays as it was.
+  async function refreshModels(keys = {}, { force = false, timeout = 5000 } = {}) {
+    const lists = kept('models');
+    await Promise.all(Object.entries(LISTS).map(async ([provider, how]) => {
+      const key = keys[provider];
+      if (!key) return;
+      const old = lists[provider];
+      if (!force && old && old.key === key.slice(-6) && Date.now() - old.at < LIST_AGE) return;
+      const guard = new AbortController();
+      const timer = setTimeout(() => guard.abort(), timeout);
+      try {
+        const res = await fetch(how.url, { headers: how.headers(key), signal: guard.signal });
+        if (!res.ok) return;
+        const ids = how.ids(await res.json()).filter((id) => typeof id === 'string');
+        if (ids.length) lists[provider] = { at: Date.now(), key: key.slice(-6), ids };
+      } catch { /* offline or refused: keep the last list */ } finally {
+        clearTimeout(timer);
+      }
+    }));
+    keep('models');
+  }
+
+  function forgetModels() {
+    for (const name of ['models', 'swaps']) {
+      memory[name] = {};
+      keep(name);
+    }
+  }
+
+  // Reads 'Please update your code to use models/gemini-3.1-pro-preview' and similar.
+  function noteSwap(provider, model, text) {
+    const match = /\buse\s+(?:models\/)?([a-z0-9][\w.-]*[a-z0-9])/i.exec(String(text ?? ''));
+    const to = match?.[1];
+    if (!to || to === model || !/[-\d]/.test(to) || (provider === 'gemini' && !to.startsWith('gemini-'))) return null;
+    kept('swaps')[`${provider}/${model}`] = to;
+    keep('swaps');
+    return to;
+  }
+
+  const geminiRank = (id) => {
+    const m = /^gemini-(\d+(?:\.\d+)?)-(pro|flash)(-preview)?(-\d{2}-\d{2,4})?$/.exec(id);
+    return m && { version: Number(m[1]), family: m[2], preview: Boolean(m[3]), dated: Boolean(m[4]) };
+  };
+  const labelOf = (provider, model) => {
+    const rank = provider === 'gemini' && geminiRank(model);
+    return rank ? `Gemini ${rank.version} ${rank.family === 'pro' ? 'Pro' : 'Flash'}` : model;
+  };
+
+  // The ladder as it stands for the lists known on this device.
+  function liveLadder() {
+    const lists = kept('models');
+    const swaps = kept('swaps');
+    const swapped = (rung) => {
+      let model = rung.model;
+      for (let hop = 0; hop < 4 && swaps[`${rung.provider}/${model}`]; hop++) model = swaps[`${rung.provider}/${model}`];
+      return model === rung.model ? rung : { ...rung, model, label: labelOf(rung.provider, model) };
+    };
+    const listed = (rung) => !lists[rung.provider] || lists[rung.provider].ids.includes(rung.model);
+    // Rungs that are gone stay in place until the end, so a newcomer knows where to stand.
+    const rungs = LADDER.map(swapped).map((rung) => ({ ...rung, gone: !listed(rung) }));
+    const gemini = lists.gemini?.ids ?? [];
+    for (const family of ['flash', 'pro']) {
+      const own = rungs.filter((rung) => rung.provider === 'gemini' && geminiRank(rung.model)?.family === family);
+      const top = Math.max(0, ...own.map((rung) => geminiRank(rung.model).version));
+      const newer = gemini.map((id) => ({ id, rank: geminiRank(id) }))
+        .filter(({ rank }) => rank && rank.family === family && rank.version > top)
+        .sort((a, b) => b.rank.version - a.rank.version || a.rank.dated - b.rank.dated || a.rank.preview - b.rank.preview);
+      if (!newer.length) continue;
+      const at = own.length ? rungs.indexOf(own[0]) : rungs.filter((rung) => rung.provider === 'gemini').length;
+      rungs.splice(at, 0, { provider: 'gemini', model: newer[0].id, label: labelOf('gemini', newer[0].id), effort: THINKING });
+    }
+    const seen = new Set();
+    return rungs.filter((rung) => {
+      const id = `${rung.provider}/${rung.model}`;
+      if (rung.gone || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }).map(({ gone, ...rung }) => rung);
+  }
+
+  // A model on the ladder as written, as it stands now, or retired from it, so a setting
+  // saved before a change still runs the ladder.
+  const onLadder = (provider, model) => [...LADDER, ...liveLadder()].some((rung) => rung.provider === provider && rung.model === model)
+    || Boolean(kept('swaps')[`${provider}/${model}`]);
 
   /* ---------- quota memory ---------- */
 
@@ -278,11 +406,15 @@
     // The ladder runs only from a model on it. A model picked by hand is never swapped.
     routes() {
       const { provider, model, only } = this.settings;
-      const rung = LADDER.find((item) => item.provider === provider && item.model === model);
-      const own = this.route(provider, model, rung);
-      if (!rung) return [own];
-      const rest = LADDER.filter((item) => item !== rung).map((item) => this.route(item.provider, item.model, item));
-      const chain = [own, ...rest].filter((route) => route.key);
+      const ladder = liveLadder();
+      // the written top rung means 'the best there is': a newer model leads instead
+      const top = LADDER[0].provider === provider && LADDER[0].model === model;
+      const rung = top ? null : ladder.find((item) => item.provider === provider && item.model === model);
+      if (!rung && !onLadder(provider, model)) return [this.route(provider, model)];
+      // a saved model that has left the ladder starts it from the top
+      const first = rung ? [this.route(provider, model, rung)] : [];
+      const rest = ladder.filter((item) => item !== rung).map((item) => this.route(item.provider, item.model, item));
+      const chain = [...first, ...rest].filter((route) => route.key);
       return only ? chain.filter((route) => only.includes(route.provider)) : chain;
     }
 
@@ -413,8 +545,14 @@
         const others = routes.some((other) => other !== route && !blockedUntil(other.id));
         // A model the provider has taken away is skipped for a day, even when it
         // is the last one left: its 404 would only puzzle the reader.
+        // When it names its replacement, the replacement is tried next.
         if (res.status === 404) {
-          const gone = /no longer available|not found|is not supported/i.test(await res.clone().text().catch(() => ''));
+          const text = await res.clone().text().catch(() => '');
+          const gone = /no longer available|not found|is not supported/i.test(text);
+          const to = noteSwap(route.provider, route.model, text);
+          if (to && !routes.some((other) => other.provider === route.provider && other.model === to)) {
+            routes.splice(routes.indexOf(route) + 1, 0, this.route(route.provider, to, { label: labelOf(route.provider, to), effort: route.effort }));
+          }
           leave(route, { until: Date.now() + (gone ? 24 * 60 : 10) * MINUTE, scope: 'down' });
           continue;
         }
@@ -444,7 +582,7 @@
 
   function ladderState(settings) {
     const client = new AiClient(settings);
-    return LADDER.map((rung) => {
+    return liveLadder().map((rung) => {
       const route = client.route(rung.provider, rung.model, rung);
       return { ...rung, hasKey: Boolean(route.key), out: blockedUntil(route.id) };
     });
@@ -493,12 +631,13 @@
     if (changes.prefix) {
       options.prefix = changes.prefix;
       blocks = null;
+      for (const name of Object.keys(memory)) delete memory[name];
     }
     if (changes.locale) options.locale = changes.locale;
   }
 
   root.AiLadder = {
-    AiClient, LADDER, PROVIDERS, block, blockedUntil, clearBlocks, configure, fromGeminiBody, ladderState, nextPacificMidnight,
-    onLadder, panelKeys, readLimit, renderPanel, routeId, whenText,
+    AiClient, LADDER, PROVIDERS, block, blockedUntil, clearBlocks, configure, fromGeminiBody, ladder: liveLadder, ladderState, nextPacificMidnight,
+    forgetModels, noteSwap, onLadder, panelKeys, readLimit, refreshModels, renderPanel, routeId, whenText,
   };
 })(globalThis);
