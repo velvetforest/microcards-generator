@@ -159,7 +159,8 @@ h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
 .tile .info{position:absolute;left:0;right:0;bottom:0;padding:34px 12px 10px;background:linear-gradient(transparent,rgba(44,42,41,.82));color:#fff}
 .tile .info b{display:block;font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tile .info small{font-size:11px;opacity:.85}
-.tile .del{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;border:0;background:var(--ovl);color:var(--danger);font-size:15px;opacity:0;transition:opacity .15s}
+.tile .del,.tile .ren{position:absolute;top:8px;right:8px;width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--border);background:var(--white);color:var(--deep);opacity:0;transition:opacity .15s,border-color .15s;cursor:pointer}
+.tile .del:hover,.tile .ren:hover{border-color:var(--deep)}
 .tile:hover .del{opacity:1}
 .tile.pending,.tile.error{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:16px;cursor:default}
 .tile.pending:hover,.tile.error:hover{transform:none;box-shadow:none}
@@ -173,7 +174,8 @@ h2{font-size:15px;margin:32px 0 14px;color:var(--strong)}
 .fo-sheen{display:none}
 .tile.folder .fn{font-size:14px;font-weight:700;color:var(--strong);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .tile.folder small{font-size:11px;color:var(--deep)}
-.tile .ren{position:absolute;top:8px;right:44px;width:30px;height:30px;border-radius:50%;border:0;background:var(--ovl);color:var(--deep);font-size:14px;opacity:0;transition:opacity .15s}
+.tile .ren{right:44px}
+.tile button.del svg,.tile button.ren svg{width:15px;height:15px}
 .tile:hover .ren{opacity:1}
 .crumb{display:flex;align-items:center;gap:10px;margin:32px 0 14px;flex-wrap:wrap}
 .crumb h2{margin:0}
@@ -3216,6 +3218,9 @@ const FOLDER_PATH = 'M8 24a6 6 0 0 1 6-6h22l8 9h38a6 6 0 0 1 6 6v39a6 6 0 0 1-6 
 const FOLDER_SVG = '<svg viewBox="0 0 96 96" aria-hidden="true"><defs><linearGradient id="foB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".26"/><stop offset="1" stop-color="#fff" stop-opacity=".04"/></linearGradient></defs>' +
   '<path class="fo-fill" d="' + FOLDER_PATH + '" style="fill:var(--c)"/><path class="fo-sheen" d="' + FOLDER_PATH + '" fill="url(#foB)"/></svg>';
 
+// drawn, not typed: a character sits off centre in most fonts
+const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const ICON_PEN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>';
 function iconBtn(cls, label, html, fn) {
   const b = document.createElement('button'); b.className = cls; b.title = label; b.innerHTML = html;
   b.onclick = e => { e.stopPropagation(); fn(); };
@@ -3302,7 +3307,7 @@ function renderGrid() {
       t.innerHTML = FOLDER_SVG + '<div class="fn"></div><small></small>';
       t.querySelector('.fn').textContent = f.name;
       t.querySelector('small').textContent = n + (n === 1 ? ' card set' : ' card sets');
-      t.append(iconBtn('ren', 'Rename', '&#9998;', () => renameFolder(f.id)), iconBtn('del', 'Delete folder', '&times;', () => removeFolder(f.id)));
+      t.append(iconBtn('ren', 'Rename', ICON_PEN, () => renameFolder(f.id)), iconBtn('del', 'Delete folder', ICON_X, () => removeFolder(f.id)));
       t.onclick = () => { curFolder = f.id; renderAll(); };
       g.appendChild(t);
     });
@@ -3328,7 +3333,7 @@ function renderGrid() {
     info.firstChild.textContent = it.title;
     info.lastChild.textContent = `${it.action === 'tom-tat' ? 'Summarize' : 'Keep original'} · ${it.mode === 'dark' ? 'Dark' : 'Light'} · ${new Date(it.created).toLocaleDateString('en-US')}${it.gen ? ' · ' + it.gen.model : ''}${it.warn ? ' · ⚠ ' + it.warn : ''}`;
     if (it.gen) t.title = it.gen.model + ' · total ' + fmtSec(it.gen.total) + (phaseLine(it.gen.t) ? ' (' + phaseLine(it.gen.t) + ')' : '');
-    t.append(f, info, iconBtn('ren', 'Rename', '&#9998;', () => renameItem(it.id)), iconBtn('del', 'Delete', '&times;', () => removeItem(it.id)));
+    t.append(f, info, iconBtn('ren', 'Rename', ICON_PEN, () => renameItem(it.id)), iconBtn('del', 'Delete', ICON_X, () => removeItem(it.id)));
     t.onclick = () => openItem(it.id);
     g.appendChild(t); ro.observe(t);
   });
