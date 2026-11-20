@@ -1597,6 +1597,55 @@ function injectGraphs(html, specs) {
   return i >= 0 ? html.slice(0, i) + tag + html.slice(i) : html + tag;
 }
 
+// Diagrams a card points at whose data never came: the model left out their
+// @@GRAPH block, wrote it so badly it could not be read, or was cut off before
+// the end, where the blocks go.
+function lostGraphRefs(deck, provided) {
+  const ids = new Set();
+  deck.cards.forEach(c => { for (const m of c.body.matchAll(/data-graph-ref\s*=\s*["']?([\w-]+)/g)) ids.add(m[1]); });
+  return [...ids].filter(id => !deck.graphs[id] && !(provided || {})[id]);
+}
+function graphBlocks(text) {
+  const out = {}; let id = null, buf = '';
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const m = line.match(/^@@([A-Za-z]+)\s*(.*)$/), k = m && m[1].toUpperCase();
+    if (k === 'GRAPH') { id = m[2].trim().split(/[\s:]+/)[0]; buf = ''; continue; }
+    if (k === 'ENDGRAPH') { if (id) { const g = readGraphJson(buf); if (g) out[id] = g; } id = null; continue; }
+    if (id) buf += line + '\n';
+  }
+  return out;
+}
+// Asks once more for just the diagrams that did not arrive: as a crop of the
+// attached file when there is one, since a crop cannot be lost, or else as
+// graph data. Whatever comes back is put in place; anything still missing is
+// returned so the deck can carry a warning.
+async function repairGraphs(deck, snap, provided, setStage, signal) {
+  let lost = lostGraphRefs(deck, provided);
+  if (!lost.length) return lost;
+  const where = id => {
+    const c = deck.cards.find(c => new RegExp('data-graph-ref\\s*=\\s*["\']?' + id + '(?![\\w-])').test(c.body));
+    const cap = c ? (c.body.match(/<p class="cap">([\s\S]*?)<\/p>/) || [])[1] || '' : '';
+    return id + ': card "' + (c ? c.title : '') + '"' + (cap ? ', chú thích "' + cap.replace(/<[^>]*>/g, '').trim() + '"' : '');
+  };
+  const canCrop = (snap.files || []).some(f => f.kind === 'inline' && (f.mime === 'application/pdf' || f.mime.startsWith('image/')));
+  const note = 'LẦN TRƯỚC, dữ liệu của các sơ đồ sau KHÔNG đến được ứng dụng:\n' + lost.map(where).join('\n') +
+    '\nKHÔNG viết lại bộ card. Chỉ trả về, cho từng sơ đồ trên, đúng một trong hai dạng sau rồi kết thúc bằng @@END:\n' +
+    (canCrop ? '- Nếu hình nằm trong tệp đính kèm (ưu tiên): một dòng `@@FIG <id> <data-src> <data-page> <ymin,xmin,ymax,xmax>`, ví dụ `@@FIG G2 1 51 150,100,900,950`. Nếu sơ đồ trải trên hai trang, viết hai dòng @@FIG cùng id.\n' : '') +
+    '- Một khối @@GRAPH <id> với JSON hợp lệ trên MỘT dòng, rồi @@ENDGRAPH. Liệt kê đủ mọi node và mọi mũi tên, nhãn chép nguyên văn, không xuống dòng trong nhãn, không dấu \\.';
+  setStage('Some diagrams did not arrive. Asking for them again...');
+  let text = '';
+  try { text = (await callGemini(snap, note, setStage, signal)).text || ''; }
+  catch (e) { if (signal && signal.aborted) throw e; return lost; }
+  Object.assign(deck.graphs, graphBlocks(text));
+  const figs = {};
+  for (const m of text.matchAll(/^@@FIG\s+([\w-]+)\s+(\d{1,3})\s+(\d{1,5})\s+(\d{1,4}(?:\s*,\s*\d{1,4}){3})\s*$/gm))
+    (figs[m[1]] = figs[m[1]] || []).push('<div class="fig" data-src="' + m[2] + '" data-page="' + m[3] + '" data-box="' + m[4].replace(/\s+/g, '') + '"></div>');
+  deck.cards.forEach(c => {
+    c.body = c.body.replace(/<div\b[^>]*data-graph-ref\s*=\s*["']?([\w-]+)["']?[^>]*>\s*<\/div>/g, (all, id) => !deck.graphs[id] && figs[id] ? figs[id].join('') : all);
+  });
+  return lostGraphRefs(deck, provided);
+}
+
 function missingGraphs(html, specs) {
   return Object.keys(specs).filter(k => !new RegExp('data-graph-ref\\s*=\\s*["\']?' + k + '(?![A-Za-z0-9])').test(html));
 }
@@ -3082,6 +3131,8 @@ async function run(job) {
     let title;
     if (deck) {
       title = deck.title || 'New card set';
+      const lost = await repairGraphs(deck, job.snapshot, dgs, setStage, job.abort.signal);
+      if (lost.length) warn = (warn ? warn + '; ' : '') + lost.length + ' diagram(s) could not be read: ' + lost.join(', ');
       await materializeFigures(deck, job.snapshot.files, setStage);
       html = buildDeckHtml(deck, job.snapshot.mode);
       html = injectGraphs(html, Object.assign({}, deck.graphs, dgs));
