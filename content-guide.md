@@ -117,7 +117,8 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 - **Tuyệt đối không bỏ, không cắt bớt, không rút gọn, không gộp** bất kỳ hình nào, kể cả khi ACTION là `tom-tat`. Tóm tắt chỉ áp dụng cho văn bản, KHÔNG áp dụng cho hình.
 - **Sơ đồ khối / lưu đồ (các ô nối bằng mũi tên): KHÔNG vẽ tay SVG.** Dùng cơ chế vẽ tự động của ứng dụng:
   - Nếu yêu cầu có kèm "SƠ ĐỒ ĐÃ ĐƯỢC TRÍCH CHÍNH XÁC" (D1, D2...), chỉ đặt `<div class="illus-fill"><div data-graph-ref="D1"></div></div>` vào card hình. Không viết lại, không sửa dữ liệu.
-  - Nếu sơ đồ chỉ có trong ảnh hoặc PDF: đọc kỹ rồi liệt kê **đầy đủ từng node và từng mũi tên** bằng khối sau, đặt ở cuối câu trả lời, trước `@@END`:
+  - Sơ đồ nằm trong **tệp đính kèm** (PDF hoặc ảnh): **cắt đúng hình gốc** bằng `fig` như mục dưới, không dựng lại bằng `@@GRAPH`. Hình cắt giống hệt nguồn và không thể bị mất.
+  - Chỉ khi không cắt được (sơ đồ nằm trong link, văn bản, mermaid hoặc ASCII): đọc kỹ rồi liệt kê **đầy đủ từng node và từng mũi tên** bằng khối sau, đặt ở cuối câu trả lời, trước `@@END`:
 
 ```
 @@GRAPH G1
@@ -125,7 +126,7 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 @@ENDGRAPH
 ```
 
-    Rồi dùng `<div class="illus-fill"><div data-graph-ref="G1"></div></div>` trong card hình. `dir` là `TD` (trên xuống), `LR` (trái sang phải), `BT` hoặc `RL`. Mỗi nhãn chép nguyên văn từ nguồn. Đếm lại số node và số mũi tên của hình gốc và đối chiếu với JSON trước khi trả kết quả.
+    JSON phải hợp lệ và nằm trên **một dòng**: không xuống dòng trong nhãn, không dấu phẩy thừa, không dấu `\` (Λ, → viết bằng ký tự Unicode). Rồi dùng `<div class="illus-fill"><div data-graph-ref="G1"></div></div>` trong card hình. `dir` là `TD` (trên xuống), `LR` (trái sang phải), `BT` hoặc `RL`. Mỗi nhãn chép nguyên văn từ nguồn. Đếm lại số node và số mũi tên của hình gốc và đối chiếu với JSON trước khi trả kết quả.
   - Mỗi sơ đồ khối nằm trong card hình riêng (card chỉ có `illus-fill` kèm tối đa một dòng chú thích ngắn, không cần danh sách), đặt ngay sau card có văn bản nói về hình đó.
 - Biểu đồ số liệu, bảng, sơ đồ không phải dạng node-mũi tên: vẽ lại **giống hệt** bằng SVG hoặc bảng HTML. Giữ đủ số hàng, số cột, số liệu, chú giải, trục và đơn vị. Hình quá lớn thì dành card riêng (`illus-fill`) hoặc chia nhiều card liên tiếp, có ghi "tiếp tục ở card sau", không thu nhỏ chữ dưới 8px và không cắt bớt.
 - **CẮT ẢNH CHỈ DÙNG CHO HÌNH, TUYỆT ĐỐI KHÔNG DÙNG CHO CHỮ.** Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Mọi câu chữ, đoạn văn, danh sách, bảng, công thức, đoạn code, đề bài, ví dụ đều phải **gõ lại thành chữ thật** trong card (bảng dùng `<table>`, công thức dùng LaTeX, code dùng `<pre><code>`), kể cả khi chúng nằm cùng trang với hình. Người đọc phải chọn và tìm kiếm được chữ trên card; một tấm ảnh chụp đoạn văn là không đạt.

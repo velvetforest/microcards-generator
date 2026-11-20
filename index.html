@@ -496,7 +496,8 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 - **Tuyệt đối không bỏ, không cắt bớt, không rút gọn, không gộp** bất kỳ hình nào, kể cả khi ACTION là `tom-tat`. Tóm tắt chỉ áp dụng cho văn bản, KHÔNG áp dụng cho hình.
 - **Sơ đồ khối / lưu đồ (các ô nối bằng mũi tên): KHÔNG vẽ tay SVG.** Dùng cơ chế vẽ tự động của ứng dụng:
   - Nếu yêu cầu có kèm "SƠ ĐỒ ĐÃ ĐƯỢC TRÍCH CHÍNH XÁC" (D1, D2...), chỉ đặt `<div class="illus-fill"><div data-graph-ref="D1"></div></div>` vào card hình. Không viết lại, không sửa dữ liệu.
-  - Nếu sơ đồ chỉ có trong ảnh hoặc PDF: đọc kỹ rồi liệt kê **đầy đủ từng node và từng mũi tên** bằng khối sau, đặt ở cuối câu trả lời, trước `@@END`:
+  - Sơ đồ nằm trong **tệp đính kèm** (PDF hoặc ảnh): **cắt đúng hình gốc** bằng `fig` như mục dưới, không dựng lại bằng `@@GRAPH`. Hình cắt giống hệt nguồn và không thể bị mất.
+  - Chỉ khi không cắt được (sơ đồ nằm trong link, văn bản, mermaid hoặc ASCII): đọc kỹ rồi liệt kê **đầy đủ từng node và từng mũi tên** bằng khối sau, đặt ở cuối câu trả lời, trước `@@END`:
 
 ```
 @@GRAPH G1
@@ -504,7 +505,7 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 @@ENDGRAPH
 ```
 
-    Rồi dùng `<div class="illus-fill"><div data-graph-ref="G1"></div></div>` trong card hình. `dir` là `TD` (trên xuống), `LR` (trái sang phải), `BT` hoặc `RL`. Mỗi nhãn chép nguyên văn từ nguồn. Đếm lại số node và số mũi tên của hình gốc và đối chiếu với JSON trước khi trả kết quả.
+    JSON phải hợp lệ và nằm trên **một dòng**: không xuống dòng trong nhãn, không dấu phẩy thừa, không dấu `\` (Λ, → viết bằng ký tự Unicode). Rồi dùng `<div class="illus-fill"><div data-graph-ref="G1"></div></div>` trong card hình. `dir` là `TD` (trên xuống), `LR` (trái sang phải), `BT` hoặc `RL`. Mỗi nhãn chép nguyên văn từ nguồn. Đếm lại số node và số mũi tên của hình gốc và đối chiếu với JSON trước khi trả kết quả.
   - Mỗi sơ đồ khối nằm trong card hình riêng (card chỉ có `illus-fill` kèm tối đa một dòng chú thích ngắn, không cần danh sách), đặt ngay sau card có văn bản nói về hình đó.
 - Biểu đồ số liệu, bảng, sơ đồ không phải dạng node-mũi tên: vẽ lại **giống hệt** bằng SVG hoặc bảng HTML. Giữ đủ số hàng, số cột, số liệu, chú giải, trục và đơn vị. Hình quá lớn thì dành card riêng (`illus-fill`) hoặc chia nhiều card liên tiếp, có ghi "tiếp tục ở card sau", không thu nhỏ chữ dưới 8px và không cắt bớt.
 - **CẮT ẢNH CHỈ DÙNG CHO HÌNH, TUYỆT ĐỐI KHÔNG DÙNG CHO CHỮ.** Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Mọi câu chữ, đoạn văn, danh sách, bảng, công thức, đoạn code, đề bài, ví dụ đều phải **gõ lại thành chữ thật** trong card (bảng dùng `<table>`, công thức dùng LaTeX, code dùng `<pre><code>`), kể cả khi chúng nằm cùng trang với hình. Người đọc phải chọn và tìm kiếm được chữ trên card; một tấm ảnh chụp đoạn văn là không đạt.
@@ -557,7 +558,7 @@ QUY TẮC VẬN HÀNH (ưu tiên cao nhất):
 - Nguồn gồm các tệp đính kèm, văn bản đi kèm và nội dung của các link được liệt kê (hãy đọc từng link). Chỉ dùng thông tin có trong nguồn.
 - KHÔNG BAO GIỜ dịch. Toàn bộ chữ (kể cả @@TITLE, @@UI và nhãn) phải ở đúng ngôn ngữ của văn bản nguồn (nguồn tiếng Anh thì ra tiếng Anh). Hướng dẫn này viết bằng tiếng Việt không có nghĩa là kết quả phải tiếng Việt.
 - Tuân thủ đúng ACTION ở đầu tin nhắn người dùng.
-- SƠ ĐỒ KHỐI/LƯU ĐỒ (node và mũi tên): KHÔNG vẽ tay SVG. Dùng data-graph-ref: nếu tôi cung cấp sơ đồ Dn thì chỉ đặt <div data-graph-ref="Dn"></div> trong .illus-fill; nếu sơ đồ nằm trong ảnh/PDF thì liệt kê ĐẦY ĐỦ mọi node và mọi cạnh trong khối @@GRAPH rồi tham chiếu bằng data-graph-ref.
+- SƠ ĐỒ KHỐI/LƯU ĐỒ (node và mũi tên): KHÔNG vẽ tay SVG. Dùng data-graph-ref: nếu tôi cung cấp sơ đồ Dn thì chỉ đặt <div data-graph-ref="Dn"></div> trong .illus-fill; nếu sơ đồ nằm trong tệp đính kèm (PDF/ảnh) thì CẮT hình gốc bằng fig, không dựng lại; chỉ khi không cắt được mới liệt kê ĐẦY ĐỦ mọi node và mọi cạnh trong khối @@GRAPH (JSON hợp lệ trên một dòng) rồi tham chiếu bằng data-graph-ref.
 - CẮT ẢNH (fig/data-box) CHỈ DÙNG CHO HÌNH, KHÔNG DÙNG CHO CHỮ. Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Đoạn văn, danh sách, đề bài, ví dụ, bảng, công thức, code đều phải gõ lại thành chữ thật (bảng dùng <table>, công thức dùng LaTeX, code dùng <pre><code>). Mỗi card phải có chữ do bạn viết; card chỉ gồm một ảnh cắt là không hợp lệ.
 - HÌNH MINH HOẠ CỦA NGUỒN (sơ đồ, biểu đồ, bảng, cây thư mục, mermaid/ASCII): KHÔNG BAO GIỜ bỏ, cắt bớt, rút gọn hay đơn giản hoá, kể cả khi ACTION là tom-tat (tóm tắt chỉ áp dụng cho văn bản). Vẽ lại giống hệt: đủ mọi ô, mọi mũi tên, đúng bố cục và đúng từng nhãn. Hình lớn thì đặt vào card riêng, không thu nhỏ chữ dưới 8px.
 - ACTION giu-nguyen = SAO CHÉP Y HỆT, không phải tóm tắt: chép nguyên văn từng câu, từng mục, từng công thức (LaTeX, giữ số hiệu), từng bảng, từng chú thích hình của phần được cung cấp; không bỏ, không gộp, không viết lại, không dừng giữa chừng. Dùng thêm nhiều card nếu cần.
@@ -1063,6 +1064,30 @@ function figFit() {
     paint();
   }
 
+  // A graph the model referred to but whose data was lost when the cards were
+  // made: the frame says so instead of standing empty.
+  function graphSpecs() {
+    var o = {}, k, t = document.getElementById('graph-specs');
+    for (k in (window.__GRAPHS || {})) o[k] = 1;
+    if (t) { try { for (k in JSON.parse(t.textContent)) o[k] = 1; } catch (e) {} }
+    return o;
+  }
+  function hasGraph(src) {
+    var G = graphSpecs(), re = /data-graph-ref\s*=\s*["']?([\w-]+)/g, m;
+    while ((m = re.exec(src))) { if (G[m[1]]) return true; }
+    return false;
+  }
+  function lostGraphs() {
+    var G = graphSpecs();
+    [].forEach.call(document.querySelectorAll('.card-body [data-graph-ref]'), function (el) {
+      if (G[el.getAttribute('data-graph-ref')]) return;
+      var frame = el.closest('.illus-fill, .illus') || el, note = document.createElement('p');
+      note.className = 'cap graph-lost';
+      note.textContent = 'This diagram was lost when the cards were made. Press + Illustration below to draw it again.';
+      frame.replaceWith(note);
+    });
+  }
+
   function experts() {
     var N = window.__NOTES, D = window.__DECK;
     if (!N) return;
@@ -1071,7 +1096,7 @@ function figFit() {
       var i = +card.dataset.i, cb = card.querySelector('.card-body'), src = (D.cards[i] && D.cards[i].body) || '';
       var wrap = el('div', 'xp-wrap'), row = el('div', 'xp-row'), host = el('div', 'xp-list');
       hosts[i] = host; btns[i] = {};
-      (N.experts || []).filter(function (e) { return e.kind !== 'solve' && !/<img\b|<svg\b|data-graph-ref/i.test(src); }).forEach(function (e) {
+      (N.experts || []).filter(function (e) { return e.kind !== 'solve' && !/<img\b|<svg\b/i.test(src) && !hasGraph(src); }).forEach(function (e) {
         var b = el('button', 'xp-btn', '+ ' + e.title);
         b.type = 'button';
         b.onclick = function () {
@@ -1190,7 +1215,7 @@ function figFit() {
       }, true);
       addEventListener('keydown', function (e) { if (e.key === 'Escape' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) parent.postMessage({ mc: 'unfull' }, '*'); });
     }
-    experts(); frames(); unspill(); lightbox();
+    lostGraphs(); experts(); frames(); unspill(); lightbox();
     [600, 1500, 3000].forEach(function (ms) { setTimeout(unspill, ms); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(later);
   });
@@ -1856,6 +1881,29 @@ html.fit .sec-title{font-size:1rem}
 }
 `;
 
+// Models write a graph's JSON loosely: a label broken over two lines, a LaTeX
+// backslash, a comma before a bracket, curly quotes, or a fence around it. A
+// graph that failed to parse was dropped and left its card an empty frame, so
+// each slip is mended in turn before giving up.
+function readGraphJson(raw) {
+  let t = String(raw || '').replace(/```[a-z]*/gi, '');
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a < 0 || b < a) return null;
+  t = t.slice(a, b + 1);
+  const steps = [
+    x => x,
+    x => x.replace(/[\r\n\t]+/g, ' '),
+    x => x.replace(/\\(?!["\\/bfnrtu])/g, '\\\\'),
+    x => x.replace(/,\s*([}\]])/g, '$1'),
+    x => x.replace(/[\u201c\u201d]/g, '"')
+  ];
+  for (const step of steps) {
+    t = step(t);
+    try { const g = JSON.parse(t); if (g && Array.isArray(g.nodes)) return g; } catch (e) {}
+  }
+  return null;
+}
+
 function parseDeck(text) {
   const t = text.replace(/^```[a-z]*\s*$/gim, '');
   if (!/^@@CARD\b/m.test(t)) return null;
@@ -1871,8 +1919,8 @@ function parseDeck(text) {
       if (k === 'UI') { v.split('|').forEach(p => { const i = p.indexOf('='); if (i > 0) deck.ui[p.slice(0, i).trim()] = p.slice(i + 1).trim(); }); continue; }
       if (k === 'CARD') { cur = { badge: '', title: '', label: '', body: '' }; deck.cards.push(cur); mode = 'meta'; graph = null; continue; }
       if (k === 'BODY') { mode = 'body'; continue; }
-      if (k === 'GRAPH') { graph = { id: v, json: '' }; mode = 'graph'; cur = null; continue; }
-      if (k === 'ENDGRAPH') { if (graph) { try { deck.graphs[graph.id] = JSON.parse(graph.json); } catch (e) {} } graph = null; mode = 'none'; continue; }
+      if (k === 'GRAPH') { graph = { id: v.split(/[\s:]+/)[0], json: '' }; mode = 'graph'; cur = null; continue; }
+      if (k === 'ENDGRAPH') { if (graph) { const g = readGraphJson(graph.json); if (g) deck.graphs[graph.id] = g; } graph = null; mode = 'none'; continue; }
       if (k === 'END') { deck.ended = true; break; }
     }
     if (mode === 'meta' && cur) {
