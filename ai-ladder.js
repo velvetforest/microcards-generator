@@ -49,7 +49,7 @@
     { provider: 'gemini', model: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', effort: THINKING },
     { provider: 'gemini', model: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', effort: THINKING },
     { provider: 'mistral', model: 'mistral-large-latest', label: 'Mistral Large' },
-    { provider: 'gemini', model: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', effort: THINKING },
+    { provider: 'gemini', model: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', effort: THINKING },
     { provider: 'groq', model: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', effort: THINKING },
   ];
 
@@ -411,7 +411,14 @@
           continue;
         }
         const others = routes.some((other) => other !== route && !blockedUntil(other.id));
-        if ([404, 413, 502].includes(res.status) && others) {
+        // A model the provider has taken away is skipped for a day, even when it
+        // is the last one left: its 404 would only puzzle the reader.
+        if (res.status === 404) {
+          const gone = /no longer available|not found|is not supported/i.test(await res.clone().text().catch(() => ''));
+          leave(route, { until: Date.now() + (gone ? 24 * 60 : 10) * MINUTE, scope: 'down' });
+          continue;
+        }
+        if ([413, 502].includes(res.status) && others) {
           leave(route, { until: Date.now() + 10 * MINUTE, scope: 'down' });
           continue;
         }
