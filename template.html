@@ -206,6 +206,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
 #viewer.pfull .bar{display:none}
 #vExit{display:none;position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:5;width:36px;height:36px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;line-height:1;padding:0}
 #viewer.pfull #vExit{display:block}
+@media (max-width:700px){#vExit{top:auto;bottom:max(14px,env(safe-area-inset-bottom));right:14px;width:44px;height:44px;font-size:24px}}
 @media (max-width:560px){
   .hdr{gap:8px}
   header{flex-wrap:wrap;gap:10px}
@@ -358,7 +359,7 @@ textarea{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:
   <div class="bar">
     <b id="vTitle"></b>
     <span class="vlook"><button class="switch" id="vMode" role="switch" aria-checked="false" title="Light / dark cards"><span class="knob"><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></button><span class="cpal" id="vPal"></span></span>
-    <button class="btn" id="vTab" title="Open in a new window">New window</button>
+    <button class="btn" id="vTab" title="Open the cards on a page of their own">Full page</button>
     <button class="btn" id="vRename">Rename</button>
     <select id="vMove" class="field" style="width:auto;max-width:180px" title="Move to folder"></select>
     <button class="btn" id="vDownload">Download</button>
@@ -2032,27 +2033,155 @@ async function pagePictures(page, vp) {
   return out;
 }
 
+// A figure is what is left of a page once its text and the parts that repeat
+// on most pages, such as a slide's title bar and footer, are taken away. The
+// model's box then only has to say which of these figures it means, so a box
+// that is a few percent off no longer cuts a figure. Worked out at one pixel a
+// point, on cells of FIG_STEP points.
+const FIG_STEP = 4, figPlans = new WeakMap();
+function figPlan(pdf) {
+  if (!figPlans.has(pdf)) figPlans.set(pdf, { ink: new Map(), regions: new Map(), tmpl: null });
+  return figPlans.get(pdf);
+}
+function pageInkCells(pdf, n) {
+  const plan = figPlan(pdf);
+  if (!plan.ink.has(n)) plan.ink.set(n, (async () => {
+    const page = await pdf.getPage(n), vp = page.getViewport({ scale: 1 });
+    const W = Math.ceil(vp.width), H = Math.ceil(vp.height), S = FIG_STEP;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d', { willReadFrequently: true }); c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
+    await page.render({ canvasContext: c, viewport: vp, intent: 'print' }).promise;
+    const gw = Math.ceil(W / S), gh = Math.ceil(H / S), ink = new Uint8Array(gw * gh), d = c.getImageData(0, 0, W, H).data;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < 235) ink[((y / S) | 0) * gw + ((x / S) | 0)] = 1; }
+    // drawn ink: what is left once every word is taken away
+    const words = await pageWords(page, vp), txt = new Uint8Array(gw * gh);
+    for (const w of words)
+      for (let y = Math.max(0, (w[0] / S) | 0); y <= Math.min(gh - 1, (w[2] / S) | 0); y++)
+        txt.fill(1, y * gw + Math.max(0, (w[1] / S) | 0), y * gw + Math.min(gw - 1, (w[3] / S) | 0) + 1);
+    const drawn = ink.map((v, i) => v && !txt[i] ? 1 : 0);
+    return { W, H, gw, gh, drawn, txt, words, vp, page };
+  })());
+  return plan.ink.get(n);
+}
+// How often each cell holds drawn ink, over up to 40 pages spread through the
+// file, counted apart for each page size. Text is left out: body text fills the
+// same area on every page of a document, and a figure can sit there too. Too
+// few pages of one size tell nothing.
+function pageTemplate(pdf) {
+  const plan = figPlan(pdf);
+  if (!plan.tmpl) plan.tmpl = (async () => {
+    const N = pdf.numPages, take = Math.min(N, 40), sizes = new Map();
+    for (let k = 0; k < take; k++) {
+      const r = await pageInkCells(pdf, 1 + Math.floor(k * N / take)), key = r.gw + 'x' + r.gh;
+      if (!sizes.has(key)) sizes.set(key, { n: 0, count: new Uint16Array(r.gw * r.gh) });
+      const s = sizes.get(key); s.n++;
+      for (let i = 0; i < r.drawn.length; i++) s.count[i] += r.drawn[i];
+    }
+    return sizes;
+  })();
+  return plan.tmpl;
+}
+// The figures on a page as [y0, x0, y1, x1] in points, or null for a page
+// with no text layer (a scan), where nothing can be taken away.
+function pageFigures(pdf, n) {
+  const plan = figPlan(pdf);
+  if (!plan.regions.has(n)) plan.regions.set(n, (async () => {
+    const r = await pageInkCells(pdf, n), { W, H, gw, gh, drawn, txt, words, vp, page } = r;
+    if (!words.length) return null;
+    const [lines, tmpl, pics] = await Promise.all([pageTextLines(page, vp), pageTemplate(pdf), pagePictures(page, vp).catch(() => [])]);
+    const S = FIG_STEP, t = tmpl.get(gw + 'x' + gh);
+    const common = t && t.n >= 8 ? t.n * 0.3 : Infinity, keep = new Uint8Array(gw * gh);
+    for (let i = 0; i < keep.length; i++) keep[i] = drawn[i] && !(t && t.count[i] >= common) ? 1 : 0;
+    const count = (src, b, m) => {                // cells set in src inside b, m cells in from its edge
+      let s = 0;
+      for (let y = b[0] + m; y < b[2] - m; y++) for (let x = b[1] + m; x < b[3] - m; x++) s += src[y * gw + x];
+      return s;
+    };
+    let figs = inkBlocks({ ink: keep, gw, gh }, 12, 12)
+      .filter(b => boxArea(b) * S * S > W * H * 0.015)
+      // a frame around a block of text: once the words are gone, only the
+      // border is left, with nothing drawn inside
+      .filter(b => { const m = 3, inner = Math.max(0, b[2] - b[0] - 2 * m) * Math.max(0, b[3] - b[1] - 2 * m); return !inner || count(keep, b, m) > inner * 0.02 || count(txt, b, m) < inner * 0.15; })
+      .map(b => b.map(v => v * S));
+    // its labels: short text against the drawing, not lines of prose, and up
+    // to two more lines stacked right under or over one of them, for a label
+    // of several lines; not more, or a column of short bullets would follow
+    const mx = W * 0.02, my = H * 0.02, short = words.filter(w => !lines.some(l => boxArea(boxMeet(l, w)) > 0.5 * boxArea(w)));
+    const stacked = (a, w) => Math.min(a[3], w[3]) - Math.max(a[1], w[1]) > 0.5 * Math.min(a[3] - a[1], w[3] - w[1]) && Math.max(w[0] - a[2], a[0] - w[2]) < 0.6 * (a[2] - a[0]);
+    figs = figs.map(b => {
+      const o = b.slice(), take = w => { o[0] = Math.min(o[0], w[0]); o[1] = Math.min(o[1], w[1]); o[2] = Math.max(o[2], w[2]); o[3] = Math.max(o[3], w[3]); };
+      let got = short.filter(w => w[0] < b[2] + my && w[2] > b[0] - my && w[1] < b[3] + mx && w[3] > b[1] - mx);
+      const left = new Set(short.filter(w => !got.includes(w)));
+      got.forEach(take);
+      for (let k = 0; k < 2 && got.length; k++) {
+        got = [...left].filter(w => got.some(a => stacked(a, w)));
+        got.forEach(w => { left.delete(w); take(w); });
+      }
+      return o;
+    });
+    // a pasted picture carries its exact frame, white margins included, so it
+    // is a figure of its own, unless it fills the page or is part of the template
+    for (const p of pics) {
+      const b = [Math.max(0, p[0]), Math.max(0, p[1]), Math.min(H, p[2]), Math.min(W, p[3])];
+      if (boxArea(b) < W * H * 0.015 || boxArea(b) > W * H * 0.8) continue;
+      if (t && t.n >= 8) {
+        let all = 0, rep = 0;
+        for (let y = (b[0] / S) | 0; y < Math.min(gh, Math.ceil(b[2] / S)); y++) for (let x = (b[1] / S) | 0; x < Math.min(gw, Math.ceil(b[3] / S)); x++) { all++; rep += t.count[y * gw + x] >= common ? 1 : 0; }
+        if (rep > all * 0.5) continue;
+      }
+      figs.push(b);
+    }
+    // parts of one figure that overlap or almost touch are one figure
+    const gx = W * 0.02, gy = H * 0.02;
+    for (let joined = true; joined;) {
+      joined = false;
+      for (let i = 0; i < figs.length && !joined; i++) for (let j = i + 1; j < figs.length && !joined; j++) {
+        const a = figs[i], b = figs[j];
+        if (a[0] < b[2] + gy && b[0] < a[2] + gy && a[1] < b[3] + gx && b[1] < a[3] + gx) {
+          figs[i] = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]; figs.splice(j, 1); joined = true;
+        }
+      }
+    }
+    return { W, H, lines, figs: figs.map(b => [Math.max(0, b[0]), Math.max(0, b[1]), Math.min(H, b[2]), Math.min(W, b[3])]) };
+  })());
+  return plan.regions.get(n);
+}
+// The figure the model's box points at, in points, or null when it points at
+// none or the figure holds lines of prose: then the box is snapped as before.
+async function figureAt(pdf, n, nb) {
+  const reg = await pageFigures(pdf, n).catch(() => null);
+  if (!reg || !reg.figs.length) return null;
+  const hint = [nb[0] / 1000 * reg.H, nb[1] / 1000 * reg.W, nb[2] / 1000 * reg.H, nb[3] / 1000 * reg.W];
+  const hit = reg.figs.filter(b => boxArea(boxMeet(b, hint)) >= 0.3 * Math.min(boxArea(b), boxArea(hint)));
+  if (!hit.length) return null;
+  const u = hit.reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]);
+  return reg.lines.some(l => boxArea(boxMeet(l, u)) > 0.8 * boxArea(l)) ? null : u;
+}
+
 async function cropFigure(f, pageNo, boxStr) {
   const nb = parseBox(boxStr);
-  let cv, pics = [], texts = [], words = [];
+  let cv, pics = [], texts = [], words = [], found = null;
   if (f.mime.startsWith('image/')) {
     const img = new Image(); img.src = 'data:' + f.mime + ';base64,' + f.data; await img.decode();
     cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
     const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height); c.drawImage(img, 0, 0);
   } else {
-    const pdf = await getPdfDoc(f);
-    const page = await pdf.getPage(Math.min(Math.max(pageNo || 1, 1), pdf.numPages));
+    const pdf = await getPdfDoc(f), n = Math.min(Math.max(pageNo || 1, 1), pdf.numPages);
+    const page = await pdf.getPage(n);
     const base = page.getViewport({ scale: 1 });
-    const wide = nb ? Math.min(1000, nb[3] - nb[1] + 280) : 1000;   // room for what the hint missed
+    if (nb) found = await figureAt(pdf, n, nb);
+    const wide = found ? Math.min(1000, (found[3] - found[1]) / base.width * 1000 + 40) : nb ? Math.min(1000, nb[3] - nb[1] + 280) : 1000;   // room for what the hint missed
     const scale = Math.max(1.5, Math.min(3.5, 1600 / Math.max(base.width * wide / 1000, 1)));
     const vp = page.getViewport({ scale });
     cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
     const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height);
     await page.render({ canvasContext: c, viewport: vp, intent: 'print' }).promise;
-    if (nb) [pics, texts, words] = await Promise.all([pagePictures(page, vp).catch(() => []), pageTextLines(page, vp).catch(() => []), pageWords(page, vp).catch(() => [])]);
+    if (found) found = found.map(v => v * scale);
+    else if (nb) [pics, texts, words] = await Promise.all([pagePictures(page, vp).catch(() => []), pageTextLines(page, vp).catch(() => []), pageWords(page, vp).catch(() => [])]);
   }
-  const W = cv.width, H = cv.height;
-  const box = nb ? snapBox(cv, [nb[0] / 1000 * H, nb[1] / 1000 * W, nb[2] / 1000 * H, nb[3] / 1000 * W], pics, texts, words) : [0, 0, H, W];
+  const W = cv.width, H = cv.height, pad = Math.round(Math.min(W, H) * 0.008);
+  const box = found ? [Math.max(0, found[0] - pad), Math.max(0, found[1] - pad), Math.min(H, found[2] + pad), Math.min(W, found[3] + pad)].map(Math.round)
+    : nb ? snapBox(cv, [nb[0] / 1000 * H, nb[1] / 1000 * W, nb[2] / 1000 * H, nb[3] / 1000 * W], pics, texts, words) : [0, 0, H, W];
   let sw = Math.max(1, box[3] - box[1]), sh = Math.max(1, box[2] - box[0]);
   const k = Math.min(1, 1800 / Math.max(sw, sh));          // keep a deck light
   const out = document.createElement('canvas'); out.width = Math.round(sw * k); out.height = Math.round(sh * k);
@@ -3195,8 +3324,13 @@ document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   e.preventDefault(); toggleViewerFull();
 });
+// Opened from the home screen, a phone has no browser bar: a page opened
+// from here would have no way back. There the cards fill this screen
+// instead, with the button that closes them.
+const homeScreenApp = () => navigator.standalone === true || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
 $('vTab').onclick = () => {
   const it = items.find(i => i.id === openId); if (!it) return;
+  if (homeScreenApp()) { enterViewerFull(); return; }
   if (lockOn()) { alert('Locked in: card sets open here until the time is up.'); return; }
   const esc = withNotes(deckHtml(it), it.notes, notesOn(), false, posOf(it.id), it.extras).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   // the tab shares this page's origin, so it can keep the bookmark itself
