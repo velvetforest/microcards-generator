@@ -913,18 +913,13 @@ function figFit() {
     if (t) { try { for (k in JSON.parse(t.textContent)) o[k] = 1; } catch (e) {} }
     return o;
   }
-  function hasGraph(src) {
-    var G = graphSpecs(), re = /data-graph-ref\s*=\s*["']?([\w-]+)/g, m;
-    while ((m = re.exec(src))) { if (G[m[1]]) return true; }
-    return false;
-  }
   function lostGraphs() {
     var G = graphSpecs();
     [].forEach.call(document.querySelectorAll('.card-body [data-graph-ref]'), function (el) {
       if (G[el.getAttribute('data-graph-ref')]) return;
       var frame = el.closest('.illus-fill, .illus') || el, note = document.createElement('p');
       note.className = 'cap graph-lost';
-      note.textContent = 'This diagram was lost when the cards were made. Press + Illustration below to draw it again.';
+      note.textContent = 'The original diagram could not be read when the cards were made. Make the cards again from the source to get it back.';
       frame.replaceWith(note);
     });
   }
@@ -937,7 +932,8 @@ function figFit() {
       var i = +card.dataset.i, cb = card.querySelector('.card-body'), src = (D.cards[i] && D.cards[i].body) || '';
       var wrap = el('div', 'xp-wrap'), row = el('div', 'xp-row'), host = el('div', 'xp-list');
       hosts[i] = host; btns[i] = {};
-      (N.experts || []).filter(function (e) { return e.kind !== 'solve' && !/<img\b|<svg\b/i.test(src) && !hasGraph(src); }).forEach(function (e) {
+      // a card whose source has a picture keeps that picture; only one without gets a drawing
+      (N.experts || []).filter(function (e) { return e.kind !== 'solve' && !/<img\b|<svg\b|data-graph-ref|data-src\s*=/i.test(src); }).forEach(function (e) {
         var b = el('button', 'xp-btn', '+ ' + e.title);
         b.type = 'button';
         b.onclick = function () {
@@ -1629,16 +1625,17 @@ async function repairGraphs(deck, snap, provided, setStage, signal) {
   };
   const canCrop = (snap.files || []).some(f => f.kind === 'inline' && (f.mime === 'application/pdf' || f.mime.startsWith('image/')));
   const note = 'LẦN TRƯỚC, dữ liệu của các sơ đồ sau KHÔNG đến được ứng dụng:\n' + lost.map(where).join('\n') +
-    '\nKHÔNG viết lại bộ card. Chỉ trả về, cho từng sơ đồ trên, đúng một trong hai dạng sau rồi kết thúc bằng @@END:\n' +
-    (canCrop ? '- Nếu hình nằm trong tệp đính kèm (ưu tiên): một dòng `@@FIG <id> <data-src> <data-page> <ymin,xmin,ymax,xmax>`, ví dụ `@@FIG G2 1 51 150,100,900,950`. Nếu sơ đồ trải trên hai trang, viết hai dòng @@FIG cùng id.\n' : '') +
-    '- Một khối @@GRAPH <id> với JSON hợp lệ trên MỘT dòng, rồi @@ENDGRAPH. Liệt kê đủ mọi node và mọi mũi tên, nhãn chép nguyên văn, không xuống dòng trong nhãn, không dấu \\.';
+    '\nKHÔNG viết lại bộ card. Chỉ trả về, cho từng sơ đồ trên, đúng dạng sau rồi kết thúc bằng @@END:\n' +
+    (canCrop
+      ? '- Các hình này có trong tệp đính kèm: chỉ trả về vị trí hình GỐC, mỗi hình một dòng `@@FIG <id> <data-src> <data-page> <ymin,xmin,ymax,xmax>`, ví dụ `@@FIG G2 1 51 150,100,900,950`. Sơ đồ trải trên hai trang thì viết hai dòng @@FIG cùng id. Không dựng lại, không tự vẽ.'
+      : '- Một khối @@GRAPH <id> với JSON hợp lệ trên MỘT dòng, rồi @@ENDGRAPH. Liệt kê đủ mọi node và mọi mũi tên, nhãn chép nguyên văn, không xuống dòng trong nhãn, không dấu \\.');
   setStage('Some diagrams did not arrive. Asking for them again...');
   let text = '';
   try { text = (await callGemini(snap, note, setStage, signal)).text || ''; }
   catch (e) { if (signal && signal.aborted) throw e; return lost; }
-  Object.assign(deck.graphs, graphBlocks(text));
+  if (!canCrop) Object.assign(deck.graphs, graphBlocks(text));
   const figs = {};
-  for (const m of text.matchAll(/^@@FIG\s+([\w-]+)\s+(\d{1,3})\s+(\d{1,5})\s+(\d{1,4}(?:\s*,\s*\d{1,4}){3})\s*$/gm))
+  if (canCrop) for (const m of text.matchAll(/^@@FIG\s+([\w-]+)\s+(\d{1,3})\s+(\d{1,5})\s+(\d{1,4}(?:\s*,\s*\d{1,4}){3})\s*$/gm))
     (figs[m[1]] = figs[m[1]] || []).push('<div class="fig" data-src="' + m[2] + '" data-page="' + m[3] + '" data-box="' + m[4].replace(/\s+/g, '') + '"></div>');
   deck.cards.forEach(c => {
     c.body = c.body.replace(/<div\b[^>]*data-graph-ref\s*=\s*["']?([\w-]+)["']?[^>]*>\s*<\/div>/g, (all, id) => !deck.graphs[id] && figs[id] ? figs[id].join('') : all);

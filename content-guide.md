@@ -46,6 +46,7 @@ title: ...
 
 - **Một card = một ý chính.** Không nhồi hai chủ đề.
 - Mỗi card có **đúng một khối minh hoạ** có ý nghĩa (SVG, sơ đồ, so sánh, quy trình, bảng mini), một **tiêu đề phần** và một **danh sách** 3 đến 4 ý. Không có card chỉ toàn chữ, không dùng SVG trang trí vô nghĩa.
+- **Hình gốc trước, tự vẽ sau.** Nếu đoạn nguồn của card đã có hình (sơ đồ, biểu đồ, ảnh, hình vẽ), khối minh hoạ của card CHÍNH LÀ hình gốc đó (mục 5). Không tự vẽ thêm SVG cho đoạn ấy và không vẽ lại hình gốc theo ý mình. Chỉ tự vẽ SVG cho đoạn **không có** hình gốc nào.
 - Câu ngắn, dùng động từ, ưu tiên con số, mốc, điều kiện cụ thể. Mỗi gạch đầu dòng tối đa khoảng 25 từ.
 - Số card: 6 đến 12 với `tom-tat`. Với `giu-nguyen` số card tuỳ độ dài nguồn (có thể nhiều hơn), miễn không bỏ ý.
 - Thứ tự: từ nền tảng đến nâng cao; phần cập nhật, ngoại lệ, điểm dễ nhầm để cuối.
@@ -128,7 +129,7 @@ Khi nguồn (văn bản, PDF, ảnh, trang web) đã có sơ đồ khối, lưu 
 
     JSON phải hợp lệ và nằm trên **một dòng**: không xuống dòng trong nhãn, không dấu phẩy thừa, không dấu `\` (Λ, → viết bằng ký tự Unicode). Rồi dùng `<div class="illus-fill"><div data-graph-ref="G1"></div></div>` trong card hình. `dir` là `TD` (trên xuống), `LR` (trái sang phải), `BT` hoặc `RL`. Mỗi nhãn chép nguyên văn từ nguồn. Đếm lại số node và số mũi tên của hình gốc và đối chiếu với JSON trước khi trả kết quả.
   - Mỗi sơ đồ khối nằm trong card hình riêng (card chỉ có `illus-fill` kèm tối đa một dòng chú thích ngắn, không cần danh sách), đặt ngay sau card có văn bản nói về hình đó.
-- Biểu đồ số liệu, bảng, sơ đồ không phải dạng node-mũi tên: vẽ lại **giống hệt** bằng SVG hoặc bảng HTML. Giữ đủ số hàng, số cột, số liệu, chú giải, trục và đơn vị. Hình quá lớn thì dành card riêng (`illus-fill`) hoặc chia nhiều card liên tiếp, có ghi "tiếp tục ở card sau", không thu nhỏ chữ dưới 8px và không cắt bớt.
+- Biểu đồ số liệu, bảng, sơ đồ không phải dạng node-mũi tên: có tệp đính kèm thì biểu đồ và hình được **cắt từ hình gốc** (bảng vẫn gõ thành `<table>`); không có tệp đính kèm thì vẽ lại **giống hệt** bằng SVG hoặc bảng HTML. Giữ đủ số hàng, số cột, số liệu, chú giải, trục và đơn vị. Hình quá lớn thì dành card riêng (`illus-fill`) hoặc chia nhiều card liên tiếp, có ghi "tiếp tục ở card sau", không thu nhỏ chữ dưới 8px và không cắt bớt.
 - **CẮT ẢNH CHỈ DÙNG CHO HÌNH, TUYỆT ĐỐI KHÔNG DÙNG CHO CHỮ.** Không được cắt một vùng văn bản của trang PDF rồi đặt vào card thay cho việc viết. Mọi câu chữ, đoạn văn, danh sách, bảng, công thức, đoạn code, đề bài, ví dụ đều phải **gõ lại thành chữ thật** trong card (bảng dùng `<table>`, công thức dùng LaTeX, code dùng `<pre><code>`), kể cả khi chúng nằm cùng trang với hình. Người đọc phải chọn và tìm kiếm được chữ trên card; một tấm ảnh chụp đoạn văn là không đạt.
 - `fig` chỉ dành cho thứ **không phải chữ**: sơ đồ, biểu đồ, đồ thị, ảnh chụp, hình vẽ, ảnh giao diện. Nếu vùng bạn định cắt chủ yếu là các dòng chữ thì đó không phải hình, hãy chép ra chữ.
 - **Mỗi card phải có nội dung chữ do bạn viết.** Card chỉ gồm một ảnh cắt là không hợp lệ, trừ card hình riêng cho một hình lớn thật sự, và card đó vẫn phải có dòng chú thích `<p class="cap">` bằng chữ.
